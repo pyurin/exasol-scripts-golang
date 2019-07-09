@@ -56,7 +56,7 @@ Pack and put separately:
    		cd ~/dev/script-languages-master/python_client && tar -zcf mypythonclient.tar.gz ./*.py ./python3 && curl -v -u w:1 -X PUT -T ./mypythonclient.tar.gz http://192.168.1.172:2580/default/mypythonclient.tar.gz
 
 
-
+alter session set script_languages = 'PYTHON=builtin_python R=builtin_r JAVA=builtin_java GO=localzmq+protobuf:///bfsdefault/default/EXAClusterOS/GolangImage?lang=test#buckets/bfsdefault/default/go/entrypoint/go.sh';
 
 
 
