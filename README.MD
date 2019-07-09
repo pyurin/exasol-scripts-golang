@@ -144,69 +144,74 @@ and in case of *EMITS*:
         }
 ```
 
-Database interaction is performed via exago.ExaIter type with:
+####Database interaction is performed via exago.ExaIter.
+####Usage:
 ##### Row []interface{}
 Current row columns
-##### Row []interface{}
-Current row columns
+
+
 ##### RowColumn map[string]*interface{}
 Current row columns by name
+
+
 ##### func (iter *ExaIter) Emit(out ...interface{})
-Emit a row:
+Emit a row
+
+
 ##### func (iter *ExaIter) Next() bool
 Iterates input, returning false if no more rows to fetch
-```
+
 
 Usage examples:
 - get column by number (w/o map lookup)
 ```
-        CREATE OR REPLACE GO  SCALAR SCRIPT gotest(a DECIMAL(16,0)) RETURNS DECIMAL(16,0) AS
+CREATE OR REPLACE GO  SCALAR SCRIPT gotest(a DECIMAL(16,0)) RETURNS DECIMAL(16,0) AS
 
-        package main
+package main
 
-        import "exago"
+import "exago"
 
-        func Run(iter *exago.ExaIter) interface{} {
-            i := iter.Row[0].(int64)
-            return i * i;
-        }
+func Run(iter *exago.ExaIter) interface{} {
+    i := iter.Row[0].(int64)
+    return i * i;
+}
 /
 
-        SELECT gotest(12);
+SELECT gotest(12);
 ```
 
 - get column by name
 ```
-        CREATE OR REPLACE GO  SCALAR SCRIPT gotest(a DECIMAL(16,0)) RETURNS DECIMAL(16,0) AS
+CREATE OR REPLACE GO  SCALAR SCRIPT gotest(a DECIMAL(16,0)) RETURNS DECIMAL(16,0) AS
 
-        package main
+package main
 
-        import "exago"
+import "exago"
 
-        func Run(iter *exago.ExaIter) interface{} {
-            i := (*iter.RowColumn["a"]).(int64)
-            return i * i;
-        }
+func Run(iter *exago.ExaIter) interface{} {
+    i := (*iter.RowColumn["a"]).(int64)
+    return i * i;
+}
 /
 
-        SELECT gotest(12);
+SELECT gotest(12);
 ```
 
 - emit
 ```
-        CREATE OR REPLACE GO  SCALAR SCRIPT gotest(a DECIMAL(16,0), b DECIMAL(16,0)) EMITS (v DECIMAL(16,0), i DECIMAL(16,0)) AS
+CREATE OR REPLACE GO  SCALAR SCRIPT gotest(a DECIMAL(16,0), b DECIMAL(16,0)) EMITS (v DECIMAL(16,0), i DECIMAL(16,0)) AS
 
-        package main
+package main
 
-        import "exago"
+import "exago"
 
-        func Run(iter *exago.ExaIter) {
-            var sumResult int64;
-            for i := iter.Row[0].(int64); i < iter.Row[1].(int64); i++ {
-                sumResult += i;
-                iter.Emit(i, sumResult)
-            }
-        }
+func Run(iter *exago.ExaIter) {
+    var sumResult int64;
+    for i := iter.Row[0].(int64); i < iter.Row[1].(int64); i++ {
+        sumResult += i;
+        iter.Emit(i, sumResult)
+    }
+}
 /
 
 SELECT gotest(1, 10);
@@ -214,22 +219,22 @@ SELECT gotest(1, 10);
 
 - iterate
 ```
-        CREATE OR REPLACE GO SET SCRIPT gotest(a VARCHAR(100)) RETURNS VARCHAR(1025) AS
+CREATE OR REPLACE GO SET SCRIPT gotest(a VARCHAR(100)) RETURNS VARCHAR(1025) AS
 
-        package main
+package main
 
-        import "exago"
+import "exago"
 
-        func Run(iter *exago.ExaIter) interface{} {
-            var resultS string;
-            for true {
-                resultS += iter.Row[0].(string)
-                if !iter.Next() {
-                    break;
-                }
-            }
-            return resultS;
+func Run(iter *exago.ExaIter) interface{} {
+    var resultS string;
+    for true {
+        resultS += iter.Row[0].(string)
+        if !iter.Next() {
+            break;
         }
+    }
+    return resultS;
+}
 /
 
 ```
