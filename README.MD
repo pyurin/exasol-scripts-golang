@@ -1,62 +1,96 @@
+Prerequisites
+Docker and Exasol server is required. Tested on Mac & Centos.
+All manipulations are expected to be done in exasol-scripts-golang root path.
 
-Build golang os image
+1. Docker container
+2. Scripts
+3. Run on Exasol
 
-   docker import http://192.168.1.172:2580/default/EXAClusterOS/ScriptLanguages-2018-05-07.tar.gz exasol-golang-os-image;
+1. Docker container
+   1.1 Download current Exasol docker base image.
+   docker import http://{$EXASOL_HOST}:{$EXASOL_BUCKETFS_PORT}/default/EXAClusterOS/{$EXASOL_OS_IMAGE} exasol-golang-os-image;
 
-   docker stop exasol-golang-os-container && docker rm exasol-golang-os-container && docker run -v `pwd`/src/:/src/ -it --name exasol-golang-os-container exasol-golang-os-image /bin/bash;
+   Example:
+   docker import http://192.168.1.172:2580/default/EXAClusterOS/ScriptLanguages-2018-05-07.tar.gz  exasol-golang-os-container-base;
+
+
+   1.2 Build required docker image based on Exasol's one
+
+   docker stop exasol-scripts-golang-container; docker rm exasol-scripts-golang-container; docker run -v `pwd`/src/:/src/ -it --name exasol-scripts-golang-container exasol-golang-os-container-base /bin/bash;
 
    chmod 777 /tmp &&
-	      apt-get update --allow-unauthenticated &&
-	      apt-get install -y pkg-config &&
-	      wget https://storage.googleapis.com/golang/go1.11.2.linux-amd64.tar.gz &&
-	      tar -xvf go1.11.2.linux-amd64.tar.gz &&
-	      mv go /usr/local &&
+      apt-get update --allow-unauthenticated &&
+      apt-get install -y pkg-config &&
+      add-apt-repository -y ppa:gophers/archive &&
+      apt-get update &&
+      apt-get install -y golang-1.11-go --allow-unauthenticated &&
 
-	      echo "export GOCACHE=/tmp/go_cache/" >> ~/.bashrc &&
-	      echo "export GOPATH=/var/lib/go/" >> ~/.bashrc &&
-	      echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc &&
+      echo "export GOCACHE=/tmp/go_cache/" >> ~/.bashrc &&
+      echo "export GOPATH=/var/lib/go/" >> ~/.bashrc &&
+      echo "export PATH=$PATH:/usr/lib/go-1.11/bin" >> ~/.bashrc &&
 
-	      echo "export GOCACHE=/tmp/go_cache/" >> /home/exasolution/.bashrc  &&
-	      echo "export GOPATH=/var/lib/go/" >> /home/exasolution/.bashrc &&
-	      echo "export PATH=$PATH:/usr/local/go/bin" >> /home/exasolution/.bashrc &&
-	      source ~/.bashrc &&
+      echo "export GOCACHE=/tmp/go_cache/" >> /home/exasolution/.bashrc  &&
+      echo "export GOPATH=/var/lib/go/" >> /home/exasolution/.bashrc &&
+      echo "export PATH=$PATH:/usr/lib/go-1.11/bin" >> /home/exasolution/.bashrc &&
+      source ~/.bashrc &&
 
-	      go get github.com/pebbe/zmq2 &&
-	      go install github.com/pebbe/zmq2 &&
-	      go get github.com/golang/protobuf/proto &&
-	      go install github.com/golang/protobuf/proto &&
+      go get github.com/pebbe/zmq2 &&
+      go install github.com/pebbe/zmq2 &&
+      go get github.com/golang/protobuf/proto &&
+      go install github.com/golang/protobuf/proto &&
 
-          ln -s /var/lib/go/pkg /pkg &&
-	      GOPATH=$GOPATH:/ go build -i /src/*.go && rm /golauncher &&
-	      GOPATH=$GOPATH:/ go build -i -buildmode=plugin /src/*.go && rm /golauncher.so &&
+      cp -R /src/* $GOPATH/src/ &&
+      ln -s  /usr/lib/go-1.11 /usr/lib/go &&
+      go build -i /src/*.go && rm /golauncher &&
+      go build -i -buildmode=plugin /src/*.go && rm /golauncher.so &&
 
-	      chmod -R 0777 $GOPATH &&
-	      chmod -R 0777 $GOCACHE
-      ;
-
-
-	docker export exasol-golang-os-container -o ./GolangImage.tar.gz &&
-        curl -v -u w:1 -X PUT -T ./GolangImage.tar.gz http://192.168.1.172:2580/default/EXAClusterOS/GolangImage.tar.gz &&
-        rm ./GolangImage.tar.gz
+      chmod -R 0777 $GOPATH &&
+      chmod -R 0777 $GOCACHE
+    ;
 
 
-    #for further work with docker image
-    #	docker start exasol-golang-os-container && docker exec -it  exasol-golang-os-container /bin/bash
+    1.3 Upload docker image
+	docker export exasol-scripts-golang-container | curl -v -u {$EXASOL_BUCKETFS_USER}:{$EXASOL_BUCKETFS_PASS} -X PUT -T - http://{$EXASOL_HOST}:{$EXASOL_BUCKETFS_PORT}/{$EXASOL_BUCKET_GOPATH}/GolangImage.tar.gz
+
+    Example:
+	docker export exasol-scripts-golang-container | curl -v -u w:1 -X PUT -T - http://192.168.1.172:2580/default/go/GolangImage.tar.gz
+
+    #for further work with docker image you can print
+    #	docker start exasol-scripts-golang-container && docker exec -it  exasol-scripts-golang-container /bin/bash
 
 
+2. Upload scripts
+
+    tar -zc ./src/ ./go.sh | curl -v -u {$EXASOL_BUCKETFS_USER}:{$EXASOL_BUCKETFS_PASS} -X PUT -T - http://{$EXASOL_HOST}:{$EXASOL_BUCKETFS_PORT}/{$EXASOL_BUCKET_GOPATH}/go_entrypoint.tar.gz
+
+    Example:
+    tar -zc ./src/ ./go.sh | curl -v -u w:1 -X PUT -T - http://192.168.1.172:2580/default/go/go_entrypoint.tar.gz
 
 
+3. Run on exasol:
+    Add GO definition into SCRIPT_LANGUAGES param with:
+    GO=localzmq+protobuf:///bfsdefault/{$EXASOL_BUCKET_GOPATH}/GolangImage?#buckets/bfsdefault/{$EXASOL_BUCKET_GOPATH}/go_entrypoint/go.sh
 
+    Example:
+    alter session set script_languages = 'PYTHON=builtin_python R=builtin_r JAVA=builtin_java GO=localzmq+protobuf:///bfsdefault/default/go/GolangImage?#buckets/bfsdefault/default/go/go_entrypoint/go.sh';
 
-Pack and put separately:
-   scripts w/o precompilation:
-       tar -zcf go_entrypoint.tar.gz ./src/ ./go.sh && curl -v -u w:1 -X PUT -T ./go_entrypoint.tar.gz http://192.168.1.172:2580/default/go/entrypoint.tar.gz && rm go_entrypoint.tar.gz
+    Run test go app
 
-   python client
-   		cd ~/dev/script-languages-master/python_client && tar -zcf mypythonclient.tar.gz ./*.py ./python3 && curl -v -u w:1 -X PUT -T ./mypythonclient.tar.gz http://192.168.1.172:2580/default/mypythonclient.tar.gz
+    CREATE OR REPLACE GO  SCALAR SCRIPT gotest() RETURNS VARCHAR(100) AS
 
+            package main
 
-alter session set script_languages = 'PYTHON=builtin_python R=builtin_r JAVA=builtin_java GO=localzmq+protobuf:///bfsdefault/default/EXAClusterOS/GolangImage?lang=test#buckets/bfsdefault/default/go/entrypoint/go.sh';
+            import "exago"
 
+            func Run(iter *exago.ExaIter) interface{} {
+                    return "hello"
+            }
+
+    /
+
+    SELECT gotest();
+
+    If execution hangs, it's useful to run debug client:
+    install pyexasol https://github.com/badoo/pyexasol/blob/master/docs/SCRIPT_OUTPUT.md and run debugger like python3 -m pyexasol script_debug --host 0.0.0.0 --p 2544
 
 

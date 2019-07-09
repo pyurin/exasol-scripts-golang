@@ -5,7 +5,7 @@ BASEDIR=`realpath $(dirname "$0")`
 
 export GOCACHE=/tmp/go_cache/
 export GOPATH=/var/lib/go/
-export PATH=$PATH:/usr/local/go/bin:/bin
+export PATH=$PATH:/usr/lib/go/bin:/bin
 
 #@mkdir('/tmp/golang_cache');
 #(HOME=/tmp/golang_cache/ PATH="$PATH:$BASEDIR/../golang/bin" go run $BASEDIR/golauncher.go $1 $2 $3 $4)
