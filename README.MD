@@ -14,62 +14,43 @@ All manipulations are expected to be done in exasol-scripts-golang root path.
 ## 1. Docker container
 ### 1.1 Download current Exasol docker base image.
 ```
-docker import http://{$EXASOL_HOST}:{$EXASOL_BUCKETFS_PORT}/default/EXAClusterOS/{$EXASOL_OS_IMAGE} exasol-golang-os-image;
+docker import http://{$EXASOL_HOST}:{$EXASOL_BUCKETFS_PORT}/default/EXAClusterOS/{$EXASOL_OS_IMAGE} exasol-os-image;
 ```
 
 Example:
 ```
-docker import http://192.168.1.172:2580/default/EXAClusterOS/ScriptLanguages-2018-05-07.tar.gz  exasol-golang-os-container-base;
+docker import http://192.168.1.172:2580/default/EXAClusterOS/ScriptLanguages-2018-05-07.tar.gz  exasol-os-image;
 ```
 
 
 ### 1.2 Build required docker image based on Exasol's one
-Start docker container
+Dockerfile is based on local **exasol-os-image**
 ```
-docker stop exasol-scripts-golang-container; docker rm exasol-scripts-golang-container; docker run -v `pwd`/src/:/src/ -it --name exasol-scripts-golang-container exasol-golang-os-container-base /bin/bash;
-```
-and configure it running specific commands
-```
-chmod 777 /tmp &&
-  apt-get update --allow-unauthenticated &&
-  apt-get install -y pkg-config &&
-  add-apt-repository -y ppa:gophers/archive &&
-  apt-get update &&
-  apt-get install -y golang-1.11-go --allow-unauthenticated &&
-
-  echo "export GOCACHE=/tmp/go_cache/" >> ~/.bashrc &&
-  echo "export GOPATH=/var/lib/go/" >> ~/.bashrc &&
-  echo "export PATH=$PATH:/usr/lib/go-1.11/bin" >> ~/.bashrc &&
-
-  echo "export GOCACHE=/tmp/go_cache/" >> /home/exasolution/.bashrc  &&
-  echo "export GOPATH=/var/lib/go/" >> /home/exasolution/.bashrc &&
-  echo "export PATH=$PATH:/usr/lib/go-1.11/bin" >> /home/exasolution/.bashrc &&
-  source ~/.bashrc &&
-
-  go get github.com/pebbe/zmq2 &&
-  go install github.com/pebbe/zmq2 &&
-  go get github.com/golang/protobuf/proto &&
-  go install github.com/golang/protobuf/proto &&
-
-  cp -R /src/* $GOPATH/src/ &&
-  ln -s  /usr/lib/go-1.11 /usr/lib/go &&
-  go build -i /src/*.go && rm /golauncher &&
-  go build -i -buildmode=plugin /src/*.go && rm /golauncher.so &&
-
-  chmod -R 0777 $GOPATH &&
-  chmod -R 0777 $GOCACHE
-;
+docker build . -t exasol-scripts-golang-image
 ```
 
-### 1.3 Upload docker image
+### 1.3 Upload docker container
+We need to upload docker container, not image (don't know why actually).
+Run container:
+```
+docker run --name exasol-scripts-golang-container exasol-scripts-golang-image
+```
+Upload container:
 ```
 docker export exasol-scripts-golang-container | curl -v -u {$EXASOL_BUCKETFS_USER}:{$EXASOL_BUCKETFS_PASS} -X PUT -T - http://{$EXASOL_HOST}:{$EXASOL_BUCKETFS_PORT}/{$EXASOL_BUCKET_GOPATH}/GolangImage.tar.gz
 ```
-
 Example:
 ```
 docker export exasol-scripts-golang-container | curl -v -u w:1 -X PUT -T - http://192.168.1.172:2580/default/go/GolangImage.tar.gz
 ```
+Stop and delete container:
+```
+docker stop exasol-scripts-golang-container &&
+docker rm exasol-scripts-golang-container
+```
+
+Be aware that exasol unpacks container archive for ~a minute and bucketfs does not
+give expected results within that time and files will be missing.
 
 ```
 #for further work with docker image you can print
