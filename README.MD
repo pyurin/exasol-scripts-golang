@@ -2,8 +2,14 @@
 
 Golang exasol client allows running golang scripts on Exasol db.
 
+Stage 1 and 2 can be executed withscript just like that ($BUCKETFS_PATH should be without slashes as suffix and prefix):
+```
+#./easyinstall.sh $BUCKETFS_HOST_PORT $BUCKETFS_PATH $BUCKETFS_USER_PASS
+./easyinstall.sh 192.168.1.172:2580 "default/go" "w:write"
+```
+
 ## Prerequisites
-Docker and Exasol server is required. Tested on Mac & Centos.
+Docker, curl and Exasol server is required. Tested on Mac & Centos.
 All manipulations are expected to be done in exasol-scripts-golang root path.
 
 1. Docker container
@@ -45,8 +51,7 @@ docker export exasol-scripts-golang-container | curl -v -u w:1 -X PUT -T - http:
 ```
 Stop and delete container:
 ```
-docker stop exasol-scripts-golang-container &&
-docker rm exasol-scripts-golang-container
+docker stop exasol-scripts-golang-container && docker rm exasol-scripts-golang-container
 ```
 
 Be aware that exasol unpacks container archive for ~a minute and bucketfs does not
