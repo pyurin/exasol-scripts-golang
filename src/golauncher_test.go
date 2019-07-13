@@ -254,11 +254,19 @@ const SUM_INT_FUNC = `
         package main
 
         import "exago"
+        import "log"
 
         func Run(iter *exago.ExaIter) interface{} {
                 var resultInt int64;
                 for true {
-                        resultInt += iter.Row[0].(int64)
+                        switch iter.Row[0].(type) {
+                                case int64:
+                                        resultInt += iter.Row[0].(int64)
+                                case nil:
+                                        break;
+                                default:
+                                      log.Panic("Unknown type for input value, expecting int64")
+                        }
                         if !iter.Next() {
                                 break;
                         }
@@ -273,11 +281,22 @@ const SUM_INT_RETURNINT_FUNC = `
         package main
 
         import "exago"
+        import "log"
 
-        func Run(iter *exago.ExaIter) int64 {
-                var resultInt int64;
+        func Run(iter *exago.ExaIter) *int64 {
+                var resultInt *int64;
                 for true {
-                        resultInt += iter.Row[0].(int64)
+                        switch iter.Row[0].(type) {
+                                case int64:
+                                        if resultInt == nil {
+                                                resultInt = new(int64)
+                                        }
+                                        *resultInt += iter.Row[0].(int64)
+                                case nil:
+                                        break;
+                                default:
+                                      log.Panic("Unknown type for input value, expecting int64")
+                        }
                         if !iter.Next() {
                                 break;
                         }
@@ -340,7 +359,7 @@ func Test1(t *testing.T) {
 }
 
 
-func TestScriptReturningInt64(t *testing.T) {
+func TestScriptReturningInt64_1(t *testing.T) {
         zSock := initZSocket();
         go func() {
                 writeCommunicationInitialization(t.Fatal, zSock, "test_script", SUM_INT_RETURNINT_FUNC, true, []interface{}{int64(0)}, false, []interface{}{int64(0)});
@@ -352,7 +371,58 @@ func TestScriptReturningInt64(t *testing.T) {
                 writeDataMessage(zSock, &rows)
                 readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
                 writeSimpleMsg(zSock, zProto.MessageType_MT_DONE)
-                readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_EMIT})
+                msg := readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_EMIT})
+                if *msg.Emit.Table.Rows != 1 || msg.Emit.Table.DataInt64[0] != 4 {
+                        log.Fatal("Incorrect return for sum function: ", msg)
+                }
+                writeSimpleMsg(zSock, zProto.MessageType_MT_EMIT)
+
+                writeCommunicationFinalization(t.Fatal, zSock)
+        }()
+        runProcess(ZSOCKADDR)
+        log.Println("Finished test")
+}
+
+
+func TestScriptReturningInt64_2(t *testing.T) {
+        zSock := initZSocket();
+        go func() {
+                writeCommunicationInitialization(t.Fatal, zSock, "test_script", SUM_INT_RETURNINT_FUNC, false, []interface{}{int64(0)}, false, []interface{}{int64(0)});
+
+                readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
+                var rows [][]interface{}
+                rows = append(rows, []interface{}{int64(1)})
+                rows = append(rows, []interface{}{int64(3)})
+                writeDataMessage(zSock, &rows)
+                readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
+                writeSimpleMsg(zSock, zProto.MessageType_MT_DONE)
+                msg := readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_EMIT})
+                if *msg.Emit.Table.Rows != 1 || msg.Emit.Table.DataInt64[0] != 4 {
+                        log.Fatal("Incorrect return for sum function: ", msg)
+                }
+                writeSimpleMsg(zSock, zProto.MessageType_MT_EMIT)
+
+                writeCommunicationFinalization(t.Fatal, zSock)
+        }()
+        runProcess(ZSOCKADDR)
+        log.Println("Finished test")
+}
+
+func TestScriptReturningInt64_3(t *testing.T) {
+        zSock := initZSocket();
+        go func() {
+                writeCommunicationInitialization(t.Fatal, zSock, "test_script", SUM_INT_RETURNINT_FUNC, true, []interface{}{int64(0)}, false, []interface{}{int64(0)});
+
+                readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
+                var rows [][]interface{}
+                rows = append(rows, []interface{}{nil})
+                writeDataMessage(zSock, &rows)
+                readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
+                writeSimpleMsg(zSock, zProto.MessageType_MT_DONE)
+                msg := readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_EMIT})
+                if *msg.Emit.Table.Rows != 1 || len(msg.Emit.Table.DataInt64) != 0 || msg.Emit.Table.DataNulls[0] != true {
+                        log.Fatal("Incorrect return for sum function: ", msg)
+                }
                 writeSimpleMsg(zSock, zProto.MessageType_MT_EMIT)
 
                 writeCommunicationFinalization(t.Fatal, zSock)

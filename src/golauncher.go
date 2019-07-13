@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"reflect"
+	"time"
 )
 
 var exaContext exago.ExaContext;
@@ -133,30 +134,106 @@ func main() {
 	}()
 }
 
-func executeScriptFunc(scriptFuncSym plugin.Symbol, iter *exago.ExaIter, expectResult bool) []interface{} {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Panic("Failed executing script ", *exaContext.ZInfoMsg.Info.ScriptName, ":\n", fmt.Sprint(r))
+func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (func()){
+	if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {
+		// function has return
+		switch iter.MetaOutColumnTypes[0] {
+			case zProto.ColumnType_PB_NUMERIC:
+				fallthrough
+			case zProto.ColumnType_PB_STRING:
+				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*string){return nil}) {
+					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*string)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+				}
+				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*string) )
+				return func() {
+					if result := scriptFunc(iter); result != nil {
+						iter.EmitValueString(*result)
+					} else {
+						iter.EmitValueNull()
+					}
+				}
+			case zProto.ColumnType_PB_DOUBLE:
+				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*float64){return nil}) {
+					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*float64)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+				}
+				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*float64) )
+				return func() {
+					if result := scriptFunc(iter); result != nil {
+						iter.EmitValueFloat64(*result)
+					} else {
+						iter.EmitValueNull()
+					}
+				}
+			case zProto.ColumnType_PB_INT32:
+				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*int32){return nil}) {
+					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*int32)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+				}
+				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*int32) )
+				return func() {
+					if result := scriptFunc(iter); result != nil {
+						iter.EmitValueInt32(*result)
+					} else {
+						iter.EmitValueNull()
+					}
+				}
+			case zProto.ColumnType_PB_BOOLEAN:
+				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*bool){return nil}) {
+					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*bool)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+				}
+				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*bool) )
+				return func() {
+					if result := scriptFunc(iter); result != nil {
+						iter.EmitValueBool(*result)
+					} else {
+						iter.EmitValueNull()
+					}
+				}
+			case zProto.ColumnType_PB_INT64:
+				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*int64){return nil}) {
+					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*int64)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+				}
+				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*int64) )
+				return func() {
+					if result := scriptFunc(iter); result != nil {
+						iter.EmitValueInt64(*result)
+					} else {
+						iter.EmitValueNull()
+					}
+				}
+			case zProto.ColumnType_PB_DATE:
+				fallthrough
+			case zProto.ColumnType_PB_TIMESTAMP:
+				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*time.Time){return nil}) {
+					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*time.Time)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+				}
+				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*time.Time) )
+				return func() {
+					if result := scriptFunc(iter); result != nil {
+						iter.EmitValueTime(*result)
+					} else {
+						iter.EmitValueNull()
+					}
+				}
+			default:
+				log.Panic("Unexpected return type logic: ", iter.MetaOutColumnTypes[0]);
 		}
-	}()
-	if expectResult {
-		if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(interface{}){return nil}) {
-			log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter) interface{} `, but it's \n", reflect.TypeOf(scriptFuncSym))
-		}
-		scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(interface{}) )
-		return []interface{}{scriptFunc(iter)};
 	} else {
 		if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(){}) {
-			log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter) (w/o return)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+			log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)` (w/o return), but it's \n", reflect.TypeOf(scriptFuncSym))
 		}
 		scriptFunc := scriptFuncSym.(func(*exago.ExaIter)() )
-		scriptFunc(iter);
-		return nil;
+		return func() {
+			scriptFunc(iter)
+		}
 	}
+	return func() {
+		log.Panic("Unexpected execute script logic")
+	};
 }
 
 func multiCallIteration(scriptFuncSym plugin.Symbol) {
 	iter := exago.NewExaIter(exaContext)
+	localExecuteScriptFunc := getExecuteScriptFunc(iter, scriptFuncSym)
 	for true {
 		resp := exago.Comm(exaContext, zProto.MessageType_MT_RUN, []zProto.MessageType{zProto.MessageType_MT_RUN,zProto.MessageType_MT_CLEANUP}, nil)
 		if *resp.Type == zProto.MessageType_MT_CLEANUP {
@@ -170,11 +247,7 @@ func multiCallIteration(scriptFuncSym plugin.Symbol) {
 				if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {
 					// script (ROW) RETURNS
 					for true {
-						//log.Println("Running script start")
-						//scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(interface{}) )
-						//iter.Emit([]interface{}{scriptFunc(iter)}...)
-						iter.Emit(executeScriptFunc(scriptFuncSym, iter, true)...)
-						//log.Println("Running script finished")
+						localExecuteScriptFunc();
 						if iter.Next() {
 							//log.Println("Fetching next row - row found")
 						} else {
@@ -188,7 +261,7 @@ func multiCallIteration(scriptFuncSym plugin.Symbol) {
 					for true {
 						//scriptFunc := scriptFuncSym.(func(*exago.ExaIter)() )
 						//scriptFunc(iter);
-						executeScriptFunc(scriptFuncSym, iter, false)
+						localExecuteScriptFunc();
 						if iter.Next() == false {
 							break;
 						}
@@ -197,16 +270,10 @@ func multiCallIteration(scriptFuncSym plugin.Symbol) {
 			}
 			if *exaContext.ZMetaMsg.Meta.InputIterType == zProto.IterType_PB_MULTIPLE {
 				if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {
-					// script(SET) RETURNS
-					//scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(interface{}) )
-					//iter.Emit([]interface{}{scriptFunc(iter)}...)
-					iter.Emit(executeScriptFunc(scriptFuncSym, iter, true)...)
+					localExecuteScriptFunc();
 				}
 				if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_MULTIPLE {
-					// script(SET) EMITS
-					//scriptFunc := scriptFuncSym.(func(*exago.ExaIter)() )
-					//scriptFunc(iter);
-					executeScriptFunc(scriptFuncSym, iter, false)
+					localExecuteScriptFunc();
 				}
 			}
 			iter.EmitFlush()

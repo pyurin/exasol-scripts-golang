@@ -49,6 +49,7 @@ func (iter *ExaIter) beforeWriteValue() {
 }
 
 func (iter *ExaIter) afterWriteValue() {
+	iter.OutRowColumnIndex++
 	if iter.OutRowColumnIndex == iter.MetaOutRowSize {
 		// last field in row
 		iter.ResultRows++;
@@ -222,7 +223,7 @@ func (iter *ExaIter) EmitValueTime(t time.Time) {
 }
 
 
-func (iter *ExaIter) EmitValueFloat(f float64) {
+func (iter *ExaIter) EmitValueFloat64(f float64) {
 	iter.beforeWriteValue()
 	if iter.MetaOutColumnTypes[iter.OutRowColumnIndex] != zProto.ColumnType_PB_DOUBLE {
 		iter.PanicTypeAssert(iter.OutRowColumnIndex, iter.ExternalRowNumber, f)
@@ -236,6 +237,15 @@ func (iter *ExaIter) EmitValueFloat(f float64) {
 	}
 }
 
+func (iter *ExaIter) EmitValueNull() {
+	iter.beforeWriteValue()
+	iter.ResultTable.DataNulls = append(iter.ResultTable.DataNulls, true)
+	iter.WriteBufferBytes += 1;
+	iter.afterWriteValue()
+	if (iter.WriteBufferBytes > MAX_DATASIZE) {
+		iter.EmitFlush();
+	}
+}
 
 func (iter *ExaIter) EmitValueString(s string) {
 	iter.beforeWriteValue()
