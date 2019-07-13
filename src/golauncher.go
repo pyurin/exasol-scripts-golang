@@ -2,8 +2,8 @@ package main
 
 import (
 	zmq "github.com/pebbe/zmq2"
-	zProto "zmqcontainer" 
-	"exago" 
+	zProto "zmqcontainer"
+	"exago"
 	"os"
 	"os/exec"
 	"io/ioutil"
@@ -16,8 +16,8 @@ import (
 )
 
 var exaContext exago.ExaContext;
-
-
+var goPath string;
+var goCache string;
 
 func loadScriptFunction(scriptSrc *string, scriptName *string) plugin.Symbol {
 	pluginFile := loadScriptFunction_compilePluginUncached(scriptSrc, scriptName)
@@ -25,7 +25,7 @@ func loadScriptFunction(scriptSrc *string, scriptName *string) plugin.Symbol {
 	if err != nil {
 		log.Panic("Failed loading plugin file ", pluginFile, "\n", err)
 	}
-	scriptFuncSym, err := p.Lookup("Run")	
+	scriptFuncSym, err := p.Lookup("Run")
 	if err != nil {
 		log.Panic("Plugin file does not contain Run function")
 	}
@@ -47,9 +47,13 @@ func loadScriptFunction_compilePluginUncached(scriptSrc *string, scriptName *str
 	cmd := exec.Command("go", "build", "-buildmode=plugin", "-o", pluginFile, srcFile)
 	cmd.Env = os.Environ()
 	//log.Println("Gopath = " + os.Getenv("GOPATH"))
-    cmd.Env = append(cmd.Env, "GOPATH=" + os.Args[2] + ":" + os.Getenv("GOPATH"))
-    cmd.Env = append(cmd.Env, "GOCACHE=" + os.Args[3])
-    //log.Println("ENV = ", cmd.Env);
+	if goPath != "" {
+		cmd.Env = append(cmd.Env, "GOPATH=" + goPath + ":" + os.Getenv("GOPATH"))
+	}
+	if goCache != "" {
+		cmd.Env = append(cmd.Env, "GOCACHE=" + goCache)
+	}
+	//log.Println("ENV = ", cmd.Env);
 	var out bytes.Buffer
 	cmd.Stderr = &out
 	cmd.Stdout = &out
@@ -64,7 +68,44 @@ func loadScriptFunction_compilePluginUncached(scriptSrc *string, scriptName *str
 	return pluginFile;
 }
 
- 
+func init() {
+	zProto.Initialize();
+	exaContext.ExaMeta = make(map[string]string);
+	exaContext.ZSocket, _ = zmq.NewSocket(zmq.REQ)
+}
+
+func runProcess(connectionString string) {
+	err := exaContext.ZSocket.Connect(connectionString)
+	if (err != nil) {
+		log.Panic("Failed connecting zmq at ", connectionString, ": ", err)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			var ZErrorMsg zProto.ExascriptRequest
+			errMsg := fmt.Sprint(r, "\nStack trace:\n", string(debug.Stack()))
+			ZErrorMsg.Close = new (zProto.ExascriptClose)
+			ZErrorMsg.Close.ExceptionMessage = &errMsg
+			exago.Comm(exaContext, zProto.MessageType_MT_CLOSE, []zProto.MessageType{}, &ZErrorMsg)
+			exaContext.ZSocket.Close()
+		}
+	}()
+
+	exaContext.ZInfoMsg = exago.Comm(exaContext, zProto.MessageType_MT_CLIENT, []zProto.MessageType{zProto.MessageType_MT_INFO}, nil);
+	exaContext.ConnectionId = *exaContext.ZInfoMsg.ConnectionId;
+	exaContext.ExaMeta["ScriptName"] = *exaContext.ZInfoMsg.Info.ScriptName;
+	exaContext.ExaMeta["SourceCode"] = *exaContext.ZInfoMsg.Info.SourceCode;
+	log.Println("Loaded meta: ", exaContext.ExaMeta);
+
+	exaContext.ZMetaMsg = exago.Comm(exaContext, zProto.MessageType_MT_META, []zProto.MessageType{zProto.MessageType_MT_META}, nil);
+
+	var scriptFuncSym = loadScriptFunction(exaContext.ZInfoMsg.Info.SourceCode, exaContext.ZInfoMsg.Info.ScriptName)
+	if *exaContext.ZMetaMsg.Meta.SingleCallMode {
+		singleCallIteration(scriptFuncSym);
+	} else {
+		multiCallIteration(scriptFuncSym);
+	}
+	exago.Comm(exaContext, zProto.MessageType_MT_FINISHED, []zProto.MessageType{zProto.MessageType_MT_FINISHED}, nil)
+}
 
 func main() {
 	/*
@@ -84,57 +125,15 @@ func main() {
 
 	return;
 	*/
-
-
-	zProto.Initialize();
-
-	exaContext.ExaMeta = make(map[string]string);
-
-    log.Println("Go app run with args: ", os.Args)
-
-	exaContext.ZSocket, _ = zmq.NewSocket(zmq.REQ)
+	runProcess(os.Args[1])
+	goPath = os.Args[2]
+	goCache = os.Args[3]
 	defer func() {
-		if r := recover(); r != nil {
-			var ZErrorMsg zProto.ExascriptRequest
-			errMsg := fmt.Sprint(r, "\nStack trace:\n", string(debug.Stack()))
-			ZErrorMsg.Close = new (zProto.ExascriptClose)
-			ZErrorMsg.Close.ExceptionMessage = &errMsg
-			exago.Comm(exaContext, zProto.MessageType_MT_CLOSE, []zProto.MessageType{zProto.MessageType_MT_FINISHED}, &ZErrorMsg)
-			exaContext.ZSocket.Close()
-			os.Exit(1);
-        }
 		exaContext.ZSocket.Close()
 	}()
-
-	if (len(os.Args) > 1) {
-		err := exaContext.ZSocket.Connect(os.Args[1])
-		if (err != nil) {
-			log.Println("Failed connecting zmq: ", err)
-		}
-		//log.Println("Finished, connected to", os.Args[1]);
-	}
-
-	exaContext.ZInfoMsg = exago.Comm(exaContext, zProto.MessageType_MT_CLIENT, []zProto.MessageType{zProto.MessageType_MT_INFO}, nil);
-	exaContext.ConnectionId = *exaContext.ZInfoMsg.ConnectionId;
-	exaContext.ExaMeta["DatabaseName"] = *exaContext.ZInfoMsg.Info.DatabaseName;
-	exaContext.ExaMeta["DatabaseVersion"] = *exaContext.ZInfoMsg.Info.DatabaseVersion;
-	exaContext.ExaMeta["ScriptName"] = *exaContext.ZInfoMsg.Info.ScriptName;
-	exaContext.ExaMeta["SourceCode"] = *exaContext.ZInfoMsg.Info.SourceCode;
-	log.Println("Loaded meta: ", exaContext.ExaMeta);
-
-
-	exaContext.ZMetaMsg = exago.Comm(exaContext, zProto.MessageType_MT_META, []zProto.MessageType{zProto.MessageType_MT_META}, nil);
-
-	var scriptFuncSym = loadScriptFunction(exaContext.ZInfoMsg.Info.SourceCode, exaContext.ZInfoMsg.Info.ScriptName)
-	if *exaContext.ZMetaMsg.Meta.SingleCallMode {
-		singleCallIteration(scriptFuncSym);
-	} else {
-		multiCallIteration(scriptFuncSym);
-	}
-    exago.Comm(exaContext, zProto.MessageType_MT_FINISHED, []zProto.MessageType{zProto.MessageType_MT_FINISHED}, nil)
 }
 
-func executeScriptFunc(scriptFuncSym plugin.Symbol, iter *exago.ExaIter, expectResult bool) []interface{} {	
+func executeScriptFunc(scriptFuncSym plugin.Symbol, iter *exago.ExaIter, expectResult bool) []interface{} {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Panic("Failed executing script ", *exaContext.ZInfoMsg.Info.ScriptName, ":\n", fmt.Sprint(r))
@@ -170,19 +169,19 @@ func multiCallIteration(scriptFuncSym plugin.Symbol) {
 			if *exaContext.ZMetaMsg.Meta.InputIterType == zProto.IterType_PB_EXACTLY_ONCE {
 				if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {
 					// script (ROW) RETURNS
-                    for true {
+					for true {
 						//log.Println("Running script start")
 						//scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(interface{}) )
 						//iter.Emit([]interface{}{scriptFunc(iter)}...)
 						iter.Emit(executeScriptFunc(scriptFuncSym, iter, true)...)
 						//log.Println("Running script finished")
-                        if iter.Next() {
-                        	//log.Println("Fetching next row - row found")
-                        } else {
-                        	//log.Println("Fetching next row - no more rows")
-                            break
-                        }
-                    }
+						if iter.Next() {
+							//log.Println("Fetching next row - row found")
+						} else {
+							//log.Println("Fetching next row - no more rows")
+							break
+						}
+					}
 				}
 				if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_MULTIPLE {
 					// script(ROW) EMITS
@@ -200,7 +199,7 @@ func multiCallIteration(scriptFuncSym plugin.Symbol) {
 				if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {
 					// script(SET) RETURNS
 					//scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(interface{}) )
-                    //iter.Emit([]interface{}{scriptFunc(iter)}...)
+					//iter.Emit([]interface{}{scriptFunc(iter)}...)
 					iter.Emit(executeScriptFunc(scriptFuncSym, iter, true)...)
 				}
 				if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_MULTIPLE {
@@ -210,7 +209,7 @@ func multiCallIteration(scriptFuncSym plugin.Symbol) {
 					executeScriptFunc(scriptFuncSym, iter, false)
 				}
 			}
-            iter.EmitFlush()
+			iter.EmitFlush()
 		}
 		resp = exago.Comm(exaContext, zProto.MessageType_MT_DONE, []zProto.MessageType{zProto.MessageType_MT_DONE,zProto.MessageType_MT_CLEANUP}, nil)
 		if *resp.Type == zProto.MessageType_MT_CLEANUP {
