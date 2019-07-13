@@ -14,6 +14,7 @@ import (
         "errors"
         "strings"
         "exago"
+        "io/ioutil"
 )
 
 const ZSOCKADDR = "ipc:///tmp/zmqvmcontainer_conn_2240680559578752105"
@@ -139,7 +140,6 @@ func writeMetaMsg(zSock *zmq.Socket, inIterMulti bool, scriptInRowPrototype []in
         parseRowPrototype := func(colsDefinition *[]*zProto.ExascriptMetadataColumnDefinition, rowPrototype []interface{}) {
                 for fieldI, field := range rowPrototype {
                         *colsDefinition = append(*colsDefinition, new (zProto.ExascriptMetadataColumnDefinition))
-
                         switch field.(type) {
                         case int64:
                                 (*colsDefinition)[fieldI].Type = &typeInt64
@@ -148,7 +148,7 @@ func writeMetaMsg(zSock *zmq.Socket, inIterMulti bool, scriptInRowPrototype []in
                                 (*colsDefinition)[fieldI].Type = &typeString
                                 (*colsDefinition)[fieldI].TypeName = &typeStringName
                         default:
-                                log.Panic("Not ready to use type ", reflect.TypeOf(field))
+                                log.Panic("Not ready to use type ", reflect.TypeOf(field), " in writemetamsg")
                         }
                         var colName = "col" + string(fieldI)
                         (*colsDefinition)[fieldI].Name = &colName
@@ -193,7 +193,7 @@ func writeDataMessage(zSock *zmq.Socket, rows *[][]interface{}) {
                                 msg.Next.Table.DataNulls = append(msg.Next.Table.DataNulls, false)
                                 msg.Next.Table.DataString = append(msg.Next.Table.DataString, (field.(string)))
                         default:
-                                log.Panic("Not ready to use type ", reflect.TypeOf(field))
+                                log.Panic("Not ready to use type ", reflect.TypeOf(field), " in writedatamsg")
                         }
                 }
                 msg.Next.Table.RowNumber = append(msg.Next.Table.RowNumber, uint64(rowI))
@@ -202,23 +202,19 @@ func writeDataMessage(zSock *zmq.Socket, rows *[][]interface{}) {
         writeMsg(zSock, msg)
 }
 
-func writeCommunicationInitialization(zSock *zmq.Socket, scriptName string, sourceCode string, inIterMulti bool, scriptInRowPrototype []interface{}, outIterMulti bool, scriptOutRowPrototype []interface{}) {
-        readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_CLIENT})
+func writeCommunicationInitialization(fatalFunc func(args ...interface{}), zSock *zmq.Socket, scriptName string, sourceCode string, inIterMulti bool, scriptInRowPrototype []interface{}, outIterMulti bool, scriptOutRowPrototype []interface{}) {
+        readMsgOrFatal(fatalFunc, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_CLIENT})
         writeInfoMsg(zSock, scriptName, sourceCode)
-        readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_META})
+        readMsgOrFatal(fatalFunc, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_META})
         writeMetaMsg(zSock, inIterMulti, scriptInRowPrototype, outIterMulti, scriptOutRowPrototype)
-        readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_RUN})
+        readMsgOrFatal(fatalFunc, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_RUN})
         writeSimpleMsg(zSock, zProto.MessageType_MT_RUN)
 }
 
-func writeCommunicationFinalization(zSock *zmq.Socket) error {
+func writeCommunicationFinalization(fatalFunc func(args ...interface{}), zSock *zmq.Socket) error {
         var msg *zProto.ExascriptRequest
-        var err error;
         for a := 0; a < 10; a++ {
-                msg, err = readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_DONE, zProto.MessageType_MT_RUN, zProto.MessageType_MT_FINISHED})
-                if err != nil {
-                        return err;
-                }
+                msg = readMsgOrFatal(fatalFunc, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_DONE, zProto.MessageType_MT_RUN, zProto.MessageType_MT_FINISHED})
                 if *msg.Type == zProto.MessageType_MT_DONE || *msg.Type == zProto.MessageType_MT_RUN {
                         writeSimpleMsg(zSock, zProto.MessageType_MT_CLEANUP)
                         continue;
@@ -269,12 +265,30 @@ const SUM_INT_FUNC = `
                 }
                 return resultInt;
         }
+`;
+
+
+const SUM_INT_RETURNINT_FUNC = `
+
+        package main
+
+        import "exago"
+
+        func Run(iter *exago.ExaIter) int64 {
+                var resultInt int64;
+                for true {
+                        resultInt += iter.Row[0].(int64)
+                        if !iter.Next() {
+                                break;
+                        }
+                }
+                return resultInt;
+        }
 
 `;
 
 
-const GENERATE_SERIES_FUNC = `
-
+const GENERATE_SERIES_EMITROW_FUNC = `
         package main
 
         import "exago"
@@ -286,30 +300,67 @@ const GENERATE_SERIES_FUNC = `
                         iter.Emit(i)
                 }
         }
+`;
 
+const GENERATE_SERIES_EMITVAL_FUNC = `
+        package main
+
+        import "exago"
+
+        func Run(iter *exago.ExaIter) {
+                offsetTo := iter.Row[1].(int64)
+                offsetFrom := iter.Row[0].(int64)
+                for i := offsetFrom; i < offsetTo; i++ {
+                        iter.EmitValueInt64(i)
+                }
+        }
 `;
 
 
-func Test1(a *testing.T) {
+
+func Test1(t *testing.T) {
         zSock := initZSocket();
         go func() {
-                writeCommunicationInitialization(zSock, "test_script", CONCAT_STR_FUNC, true, []interface{}{"string1"}, false, []interface{}{"string1"});
+                writeCommunicationInitialization(t.Fatal, zSock, "test_script", CONCAT_STR_FUNC, true, []interface{}{"string1"}, false, []interface{}{"string1"});
 
-                readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
+                readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
                 var rows [][]interface{}
                 rows = append(rows, []interface{}{"string1"})
                 rows = append(rows, []interface{}{"string2"})
                 writeDataMessage(zSock, &rows)
-                readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
+                readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
                 writeSimpleMsg(zSock, zProto.MessageType_MT_DONE)
-                readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_EMIT})
+                readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_EMIT})
                 writeSimpleMsg(zSock, zProto.MessageType_MT_EMIT)
 
-                writeCommunicationFinalization(zSock)
+                writeCommunicationFinalization(t.Fatal, zSock)
         }()
         runProcess(ZSOCKADDR)
         log.Println("Finished test")
 }
+
+
+func TestScriptReturningInt64(t *testing.T) {
+        zSock := initZSocket();
+        go func() {
+                writeCommunicationInitialization(t.Fatal, zSock, "test_script", SUM_INT_RETURNINT_FUNC, true, []interface{}{int64(0)}, false, []interface{}{int64(0)});
+
+                readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
+                var rows [][]interface{}
+                rows = append(rows, []interface{}{int64(1)})
+                rows = append(rows, []interface{}{int64(3)})
+                writeDataMessage(zSock, &rows)
+                readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
+                writeSimpleMsg(zSock, zProto.MessageType_MT_DONE)
+                readMsgOrFatal(t.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_EMIT})
+                writeSimpleMsg(zSock, zProto.MessageType_MT_EMIT)
+
+                writeCommunicationFinalization(t.Fatal, zSock)
+        }()
+        runProcess(ZSOCKADDR)
+        log.Println("Finished test")
+}
+
 
 func BenchmarkDummy(b *testing.B) {
         var ints [1000000]int64;
@@ -321,10 +372,13 @@ func BenchmarkDummy(b *testing.B) {
 }
 
 func Benchmark1(b *testing.B) {
+        if !testing.Verbose() {
+                log.SetOutput(ioutil.Discard)
+        }
         done := make(chan bool)
         zSock := initZSocket();
         go func() {
-                writeCommunicationInitialization(zSock, "test_script", SUM_INT_FUNC, true, []interface{}{int64(0)}, false, []interface{}{int64(0)});
+                writeCommunicationInitialization(b.Fatal, zSock, "test_script", SUM_INT_FUNC, true, []interface{}{int64(0)}, false, []interface{}{int64(0)});
 
                 for i := b.N; i > 0; i-- {
                         readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
@@ -347,7 +401,7 @@ func Benchmark1(b *testing.B) {
                         }
                 }
 
-                writeCommunicationFinalization(zSock)
+                writeCommunicationFinalization(b.Fatal, zSock)
                 done <- true
         }()
         runProcess(ZSOCKADDR)
@@ -355,30 +409,33 @@ func Benchmark1(b *testing.B) {
         log.Println("Finished benchmark")
 }
 
-func continueDatasetIteration(zSock *zmq.Socket) error {
-        msg, err := readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_DONE, zProto.MessageType_MT_RUN})
-        if err != nil {
-                return err;
-        }
+func continueDatasetIteration(fatalFunc func(args ...interface{}), zSock *zmq.Socket) error {
+        msg := readMsgOrFatal(fatalFunc, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_DONE, zProto.MessageType_MT_RUN})
         if *msg.Type == zProto.MessageType_MT_DONE {
                 writeSimpleMsg(zSock, zProto.MessageType_MT_DONE)
-                readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_RUN})
+                readMsgOrFatal(fatalFunc, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_RUN})
         }
         writeSimpleMsg(zSock, zProto.MessageType_MT_RUN)
         return nil;
 }
 
-func BenchmarkGenerateSeries(b *testing.B) {
+func benchmarkGenerateSeriesBase(b *testing.B, generateSeriesFunc string) {
+        if !testing.Verbose() {
+                log.SetOutput(ioutil.Discard)
+        }
         done := make(chan bool)
         zSock := initZSocket();
         go func() {
-                writeCommunicationInitialization(zSock, "test_script", GENERATE_SERIES_FUNC, true, []interface{}{int64(0),int64(0)}, true, []interface{}{int64(0)});
+                writeCommunicationInitialization(b.Fatal, zSock, "test_script", generateSeriesFunc, true, []interface{}{int64(0),int64(0)}, true, []interface{}{int64(0)});
 
+                b.ResetTimer();
+                b.StopTimer();
                 for i := b.N; i > 0; i-- {
                         readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
                         var rows [][]interface{}
                         rows = append(rows, []interface{}{int64(1), int64(10 * 1000 * 1000)})
                         writeDataMessage(zSock, &rows)
+                        b.StartTimer();
 
                         for true {
                                 dMsg, err := readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_EMIT, zProto.MessageType_MT_NEXT, zProto.MessageType_MT_DONE})
@@ -389,6 +446,7 @@ func BenchmarkGenerateSeries(b *testing.B) {
                                         writeSimpleMsg(zSock, zProto.MessageType_MT_DONE)
                                         break;
                                 } else if *dMsg.Type == zProto.MessageType_MT_DONE {
+                                        b.StopTimer()
                                         writeSimpleMsg(zSock, zProto.MessageType_MT_DONE)
                                         break;
                                 } else {
@@ -398,11 +456,11 @@ func BenchmarkGenerateSeries(b *testing.B) {
                         }
 
                         if (i > 1) {
-                                continueDatasetIteration(zSock);
+                                continueDatasetIteration(b.Fatal, zSock);
                         }
                 }
-
-                writeCommunicationFinalization(zSock)
+                b.StopTimer();
+                writeCommunicationFinalization(b.Fatal, zSock)
                 done <- true
         }()
         runProcess(ZSOCKADDR)
@@ -410,12 +468,22 @@ func BenchmarkGenerateSeries(b *testing.B) {
         log.Println("Finished benchmark")
 }
 
+func BenchmarkGenerateSeriesWithEmitRow(b *testing.B) {
+        benchmarkGenerateSeriesBase(b, GENERATE_SERIES_EMITROW_FUNC);
+}
+
+func BenchmarkGenerateSeriesWithEmitValue(b *testing.B) {
+        benchmarkGenerateSeriesBase(b, GENERATE_SERIES_EMITVAL_FUNC);
+}
 
 func BenchmarkLoadDataset(b *testing.B) {
+        if !testing.Verbose() {
+                log.SetOutput(ioutil.Discard)
+        }
         done := make(chan bool)
         zSock := initZSocket();
         go func() {
-                writeCommunicationInitialization(zSock, "test_script", SUM_INT_FUNC, true, []interface{}{int64(0)}, false, []interface{}{int64(0)});
+                writeCommunicationInitialization(b.Fatal, zSock, "test_script", SUM_INT_FUNC, true, []interface{}{int64(0)}, false, []interface{}{int64(0)});
 
                 for i := b.N; i > 0; i-- {
                         readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
@@ -438,7 +506,7 @@ func BenchmarkLoadDataset(b *testing.B) {
                         }
                 }
 
-                writeCommunicationFinalization(zSock)
+                writeCommunicationFinalization(b.Fatal, zSock)
                 done <- true
         }()
         runProcess(ZSOCKADDR)
@@ -454,7 +522,7 @@ func TestFuncIncorrectReturnType(b *testing.T) {
                 defer func() {
                         done<-true
                 }()
-                writeCommunicationInitialization(zSock, "test_script", CONCAT_STR_FUNC, true, []interface{}{"string1"}, false, []interface{}{int64(0)});
+                writeCommunicationInitialization(b.Fatal, zSock, "test_script", CONCAT_STR_FUNC, true, []interface{}{"string1"}, false, []interface{}{int64(0)});
                 readMsgOrFatal(b.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
                 rows := [][]interface{}{{"string"}}
                 writeDataMessage(zSock, &rows)

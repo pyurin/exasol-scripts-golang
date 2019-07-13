@@ -70,11 +70,11 @@ func loadScriptFunction_compilePluginUncached(scriptSrc *string, scriptName *str
 
 func init() {
 	zProto.Initialize();
-	exaContext.ExaMeta = make(map[string]string);
-	exaContext.ZSocket, _ = zmq.NewSocket(zmq.REQ)
 }
 
 func runProcess(connectionString string) {
+	exaContext.ExaMeta = make(map[string]string);
+	exaContext.ZSocket, _ = zmq.NewSocket(zmq.REQ)
 	err := exaContext.ZSocket.Connect(connectionString)
 	if (err != nil) {
 		log.Panic("Failed connecting zmq at ", connectionString, ": ", err)

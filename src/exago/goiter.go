@@ -3,12 +3,10 @@ package exago
 import (
 	zProto "zmqcontainer"
 	"log"
-	"time"
 	"reflect"
-	"math"
 )
 
-const MAX_DATASIZE = 6000000000;
+const MAX_DATASIZE = 100 * 1000 * 1000;
 
 const ERROR_INCOMPATIBLE_RETURN_TYPE = "Return/emit incompatible type";
 
@@ -29,13 +27,16 @@ type ExaIter struct {
 	ExternalRowNumber uint64
 	Row []interface{}
 	RowColumn map[string]*interface{}
-	OutRow []interface{}
 	exaContext ExaContext
 	WriteBufferBytes uint64
 	ResultZMsg *zProto.ExascriptRequest
 	ResultRowsInGroup uint64
 	ResultRows uint64
 	InputOffsets ExaIterInputOffsets
+	MetaOutRowSize int
+	MetaOutColumnTypes []zProto.ColumnType
+	OutRowColumnIndex int
+	ResultTable *zProto.ExascriptTableData
 }
 
 /**
@@ -63,82 +64,26 @@ func NewExaIter(exaContext ExaContext) *ExaIter {
 	for colI, colInfo := range iter.exaContext.ZMetaMsg.Meta.InputColumns {
 		iter.RowColumn[*colInfo.Name] = &iter.Row[colI];
 	}
+	for _, colInfo := range iter.exaContext.ZMetaMsg.Meta.OutputColumns {
+		iter.MetaOutColumnTypes = append(iter.MetaOutColumnTypes, *colInfo.Type);
+	}
+	iter.MetaOutRowSize = len(iter.exaContext.ZMetaMsg.Meta.OutputColumns)
 	return iter;
 }
 
-func (iter *ExaIter) ClearResultData() {
-	iter.ResultZMsg = new(zProto.ExascriptRequest);
-	iter.ResultZMsg.Emit = new (zProto.ExascriptEmitDataReq);
-	iter.ResultZMsg.Emit.Table = new (zProto.ExascriptTableData);
-	iter.ResultRowsInGroup = 0;
-	iter.ResultRows = 0;
-	iter.ResultZMsg.Emit.Table.RowsInGroup = &iter.ResultRowsInGroup;
-	iter.ResultZMsg.Emit.Table.Rows = &iter.ResultRows;
-	iter.WriteBufferBytes = 0;
-	// preallocate slices for optimization
-	if (cap(iter.ResultZMsg.Emit.Table.RowNumber) == 0) {
-		//initial clean up
-		iter.ResultZMsg.Emit.Table.RowNumber = make([]uint64, 0, 100 * 1000)
-		iter.ResultZMsg.Emit.Table.DataNulls = make([]bool, 0, 100 * 1000)
-		iter.ResultZMsg.Emit.Table.DataBool = make([]bool, 0, 100 * 1000)
-		iter.ResultZMsg.Emit.Table.DataInt32 = make([]int32, 0, 100 * 1000)
-		iter.ResultZMsg.Emit.Table.DataInt64 = make([]int64, 0, 100 * 1000)
-		iter.ResultZMsg.Emit.Table.DataString = make([]string, 0, 100 * 1000)
-		iter.ResultZMsg.Emit.Table.DataDouble = make([]float64, 0, 100 * 1000)
-	}
-	iter.ResultZMsg.Emit.Table.RowNumber = iter.ResultZMsg.Emit.Table.RowNumber[:0]
-	iter.ResultZMsg.Emit.Table.DataNulls = iter.ResultZMsg.Emit.Table.DataNulls[:0]
-	iter.ResultZMsg.Emit.Table.DataDouble = iter.ResultZMsg.Emit.Table.DataDouble[:0]
-	iter.ResultZMsg.Emit.Table.DataBool = iter.ResultZMsg.Emit.Table.DataBool[:0]
-	iter.ResultZMsg.Emit.Table.DataInt32 = iter.ResultZMsg.Emit.Table.DataInt32[:0]
-	iter.ResultZMsg.Emit.Table.DataInt64 = iter.ResultZMsg.Emit.Table.DataInt64[:0]
-	iter.ResultZMsg.Emit.Table.DataDouble = iter.ResultZMsg.Emit.Table.DataDouble[:0]
-	iter.ResultZMsg.Emit.Table.DataString = iter.ResultZMsg.Emit.Table.DataString[:0]
-}
 
-func (iter *ExaIter) CleanupInput() {
-	iter.IsFinished = false;
-	iter.ZMessage = nil;
-	iter.Rownum = 0;
-}
-
-func (iter *ExaIter) Next() bool {
-	if (iter.IsFinished) {
-		return false;
-	}
-	if iter.ZMessage == nil || iter.Rownum >= *iter.ZMessage.Next.Table.Rows {
-		iter.ZMessage = Comm(iter.exaContext, zProto.MessageType_MT_NEXT, []zProto.MessageType{zProto.MessageType_MT_NEXT, zProto.MessageType_MT_DONE}, nil)
-		iter.Rownum = 0
-
-		p := reflect.ValueOf(&iter.InputOffsets).Elem()
-		p.Set(reflect.Zero(p.Type()))
-
-		if *iter.ZMessage.Type == zProto.MessageType_MT_DONE {
-			//log.Println("ITER.", "iterNext", " - finished")
-			iter.IsFinished = true;
-			return false
-		} else {
-			//log.Println("ITER.", "iterNext", " - finished", iter.ZMessage.Next.Table)
-		}
-
-	}
-	iter.readRow();
-	iter.Rownum++;
-	return true;
-}
-
-func (iter *ExaIter) PanicTypeAssert(fieldI int, extRowNum uint64, realVal *interface{}) {
+func (iter *ExaIter) PanicTypeAssert(fieldI int, extRowNum uint64, realVal interface{}) {
 	if  *iter.exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {
 		//return
 		log.Panic(
-			ERROR_INCOMPATIBLE_RETURN_TYPE, "`", reflect.TypeOf(*realVal), "`",
+			ERROR_INCOMPATIBLE_RETURN_TYPE, "`", reflect.TypeOf(realVal), "`",
 			" while expecting ",
 			*iter.exaContext.ZMetaMsg.Meta.OutputColumns[fieldI].TypeName,
 			"\n");
 	} else {
 		//emits
 		log.Panic(
-			ERROR_INCOMPATIBLE_RETURN_TYPE, "`", reflect.TypeOf(*realVal), "`",
+			ERROR_INCOMPATIBLE_RETURN_TYPE, "`", reflect.TypeOf(realVal), "`",
 			" for column ",
 			fieldI,
 			" (name=", *iter.exaContext.ZMetaMsg.Meta.OutputColumns[fieldI].Name, "), ",
@@ -146,181 +91,4 @@ func (iter *ExaIter) PanicTypeAssert(fieldI int, extRowNum uint64, realVal *inte
 			*iter.exaContext.ZMetaMsg.Meta.OutputColumns[fieldI].TypeName,
 			"\n");
 	}
-}
-
-/**
-  * Writes row into ResultZMsg message buf
-  */
-func (iter *ExaIter) writeRow(out []interface{}) {
-	iter.ResultZMsg.Emit.Table.RowNumber = append(iter.ResultZMsg.Emit.Table.RowNumber, iter.ExternalRowNumber)
-	iter.WriteBufferBytes += 8;
-
-	var fieldI int;
-	var field interface{};
-
-
-	for fieldI, field = range(out) {
-		if field == nil {
-			iter.WriteBufferBytes++
-			iter.ResultZMsg.Emit.Table.DataNulls = append(iter.ResultZMsg.Emit.Table.DataNulls, true)
-		} else {
-			iter.ResultZMsg.Emit.Table.DataNulls = append(iter.ResultZMsg.Emit.Table.DataNulls, false)
-			switch *iter.exaContext.ZMetaMsg.Meta.OutputColumns[fieldI].Type {
-			case zProto.ColumnType_PB_NUMERIC:
-				fallthrough
-			case zProto.ColumnType_PB_STRING:
-				switch out[fieldI].(type){
-					case string:
-						iter.ResultZMsg.Emit.Table.DataString = append(iter.ResultZMsg.Emit.Table.DataString, out[fieldI].(string))
-						iter.WriteBufferBytes += uint64(len(field.(string)));
-					default:
-						iter.PanicTypeAssert(fieldI, iter.ExternalRowNumber, &out[fieldI])
-				}
-			case zProto.ColumnType_PB_DOUBLE:
-				switch out[fieldI].(type){
-					case float64:
-						iter.ResultZMsg.Emit.Table.DataDouble = append(iter.ResultZMsg.Emit.Table.DataDouble, out[fieldI].(float64))
-						iter.WriteBufferBytes += 12 //why 12 but not 8?....
-					default:
-						iter.PanicTypeAssert(fieldI, iter.ExternalRowNumber, &out[fieldI])
-				}
-			case zProto.ColumnType_PB_BOOLEAN:
-				switch out[fieldI].(type){
-					case bool:
-						iter.ResultZMsg.Emit.Table.DataBool = append(iter.ResultZMsg.Emit.Table.DataBool, out[fieldI].(bool))
-						iter.WriteBufferBytes += 1
-					default:
-						iter.PanicTypeAssert(fieldI, iter.ExternalRowNumber, &out[fieldI])
-				}
-			case zProto.ColumnType_PB_INT32:
-				switch out[fieldI].(type){
-					case int32:
-						iter.ResultZMsg.Emit.Table.DataInt32 = append(iter.ResultZMsg.Emit.Table.DataInt32, out[fieldI].(int32))
-						iter.WriteBufferBytes += 4
-					default:
-						iter.PanicTypeAssert(fieldI, iter.ExternalRowNumber, &out[fieldI])
-				}
-			case zProto.ColumnType_PB_INT64:
-				switch out[fieldI].(type){
-					case int64:
-						iter.ResultZMsg.Emit.Table.DataInt64 = append(iter.ResultZMsg.Emit.Table.DataInt64, out[fieldI].(int64))
-						iter.WriteBufferBytes += 8
-					default:
-						iter.PanicTypeAssert(fieldI, iter.ExternalRowNumber, &out[fieldI])
-				}
-			case zProto.ColumnType_PB_TIMESTAMP:
-				switch out[fieldI].(type) {
-					case float64:
-						sec, dec := math.Modf(out[fieldI].(float64));
-						timeFormatted := (time.Unix(int64(sec), int64(dec*(1e9)))).Format("2006-01-02 15:04:05.999")
-						iter.ResultZMsg.Emit.Table.DataString = append(iter.ResultZMsg.Emit.Table.DataString, timeFormatted)
-						iter.WriteBufferBytes += uint64(len(timeFormatted));
-					case int64:
-						timeFormatted := (time.Unix(out[fieldI].(int64), 0)).Format("2006-01-02 15:04:05.999")
-						iter.ResultZMsg.Emit.Table.DataString = append(iter.ResultZMsg.Emit.Table.DataString, timeFormatted)
-						iter.WriteBufferBytes += uint64(len(timeFormatted));
-					case time.Time:
-						timeFormatted := (out[fieldI].(time.Time)).Format("2006-01-02 15:04:05.999")
-						iter.ResultZMsg.Emit.Table.DataString = append(iter.ResultZMsg.Emit.Table.DataString, timeFormatted)
-						iter.WriteBufferBytes += uint64(len(timeFormatted));
-					case string:
-						iter.ResultZMsg.Emit.Table.DataString = append(iter.ResultZMsg.Emit.Table.DataString, out[fieldI].(string))
-						iter.WriteBufferBytes += uint64(len(field.(string)));
-					default:
-						iter.PanicTypeAssert(fieldI, iter.ExternalRowNumber, &out[fieldI])
-				}
-			case zProto.ColumnType_PB_DATE:
-				switch out[fieldI].(type) {
-					case time.Time:
-						timeFormatted := (out[fieldI].(time.Time)).Format("2006-01-02")
-						iter.ResultZMsg.Emit.Table.DataString = append(iter.ResultZMsg.Emit.Table.DataString, timeFormatted)
-						iter.WriteBufferBytes += uint64(len(timeFormatted));
-					case string:
-						iter.ResultZMsg.Emit.Table.DataString = append(iter.ResultZMsg.Emit.Table.DataString, out[fieldI].(string))
-						iter.WriteBufferBytes += uint64(len(field.(string)));
-					default:
-						iter.PanicTypeAssert(fieldI, iter.ExternalRowNumber, &out[fieldI])
-				}
-			default:
-				log.Panic("Undefined outcolumn type: ", iter.exaContext.ZMetaMsg.Meta.OutputColumns[fieldI])
-			}
-		}
-	}
-	iter.ResultRows++;
-}
-
-func (iter *ExaIter) EmitFlush() {
-	Comm(iter.exaContext, zProto.MessageType_MT_EMIT, []zProto.MessageType{zProto.MessageType_MT_EMIT}, iter.ResultZMsg)
-	iter.ClearResultData();
-}
-
-func (iter *ExaIter) Emit(out ...interface{}) {
-	// emits one row
-	// if size of all emmited rows in the buffer is larger then
-	// MAX_DATASIZE, then flush the buffer.
-	//log.Println("Row to emit: ", out)
-	if len(out) == len(iter.exaContext.ZMetaMsg.Meta.OutputColumns) {
-		iter.writeRow(out)
-		//log.Println("Write finished, buf size: ", iter.WriteBufferBytes)
-	} else {
-		log.Panic("Incorrect number of rows - expecting ", len(iter.exaContext.ZMetaMsg.Meta.OutputColumns), ", got ", len(out))
-	}
-	if (iter.WriteBufferBytes > MAX_DATASIZE) {
-		iter.EmitFlush();
-	}
-}
-
-
-//read next row from ZMessage
-func (iter *ExaIter) readRow() {
-
-	iter.ExternalRowNumber = iter.ZMessage.Next.Table.RowNumber[iter.InputOffsets.ExternalRowNumber];
-	iter.InputOffsets.ExternalRowNumber++;
-
-	for i, colInfo := range iter.exaContext.ZMetaMsg.Meta.InputColumns {
-		isNullValue := iter.ZMessage.Next.Table.DataNulls[ iter.InputOffsets.Nulls ]
-		iter.InputOffsets.Nulls++;
-		if isNullValue {
-			iter.Row[i] = nil;
-		} else {
-			switch *colInfo.Type {
-			case zProto.ColumnType_PB_DOUBLE:
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataDouble[ iter.InputOffsets.Doubles ];
-				iter.InputOffsets.Doubles++;
-			case zProto.ColumnType_PB_INT32:
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataInt32[ iter.InputOffsets.Int32s ];
-				iter.InputOffsets.Int32s++;
-			case zProto.ColumnType_PB_INT64:
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataInt64[ iter.InputOffsets.Int64s ];
-				iter.InputOffsets.Int64s++;
-			case zProto.ColumnType_PB_BOOLEAN:
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataBool[ iter.InputOffsets.Bools ];
-				iter.InputOffsets.Bools++;
-			case zProto.ColumnType_PB_NUMERIC:
-				// @todo I dont know about numeric / decimal types in golang
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ];
-				iter.InputOffsets.Strings++;
-			case zProto.ColumnType_PB_TIMESTAMP:
-				var err error;
-				iter.Row[i], err = time.Parse("2006-01-02 15:04:05.999999", iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ])
-				if err != nil {
-					log.Panic("Could not parse time ", iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ], "; ", err)
-				}
-				iter.InputOffsets.Strings++;
-			case zProto.ColumnType_PB_DATE:
-				var err error;
-				iter.Row[i], err = time.Parse("2006-01-02", iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ])
-				if err != nil {
-					log.Panic("Could not parse date ", iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ], "; ", err)
-				}
-				iter.InputOffsets.Strings++;
-			case zProto.ColumnType_PB_STRING:
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ];
-				iter.InputOffsets.Strings++;
-			default:
-				log.Panic("Unknown column type: ", colInfo.Type);
-			}
-		}
-	}
-	//log.Println("Read row: ", iter.Row);
 }
