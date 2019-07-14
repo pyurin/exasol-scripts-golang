@@ -28,7 +28,6 @@ func (iter *ExaIter) CleanupInput() {
 func (iter *ExaIter) Reset() bool {
 	iter.InZMessage = Comm(iter.exaContext, zProto.MessageType_MT_RESET, []zProto.MessageType{zProto.MessageType_MT_RESET, zProto.MessageType_MT_DONE}, nil)
 	if *iter.InZMessage.Type == zProto.MessageType_MT_DONE {
-		log.Println("ITER.", "iterReset", " - finished")
 		for i, _ := range in_row {
 			in_row[i] = nil;
 		}
@@ -40,6 +39,7 @@ func (iter *ExaIter) Reset() bool {
 	p := reflect.ValueOf(&iter.inGlobalInputOffsets).Elem()
 	p.Set(reflect.Zero(p.Type()))
 
+	iter.IsFinished = false;
 	iter.inZMsgRowIndex = 0
 	iter.ExternalRowNumber = iter.InZMessage.Next.Table.RowNumber[iter.inZMsgRowIndex]
 	iter.readRow()
