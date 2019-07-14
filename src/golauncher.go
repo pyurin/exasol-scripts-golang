@@ -86,7 +86,7 @@ func runProcess(connectionString string) {
 			errMsg := fmt.Sprint(r, "\nStack trace:\n", string(debug.Stack()))
 			ZErrorMsg.Close = new (zProto.ExascriptClose)
 			ZErrorMsg.Close.ExceptionMessage = &errMsg
-			exago.Comm(exaContext, zProto.MessageType_MT_CLOSE, []zProto.MessageType{}, &ZErrorMsg)
+			exago.Comm(exaContext, zProto.MessageType_MT_CLOSE, []zProto.MessageType{zProto.MessageType_MT_CLOSE, zProto.MessageType_MT_FINISHED}, &ZErrorMsg)
 			exaContext.ZSocket.Close()
 		}
 	}()
