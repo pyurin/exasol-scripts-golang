@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 	"math"
+	"math/big"
 )
 
 
@@ -249,12 +250,29 @@ func (iter *ExaIter) EmitValueNull() {
 
 func (iter *ExaIter) EmitValueString(s string) {
 	iter.beforeWriteValue()
-	if iter.MetaOutColumnTypes[iter.OutRowColumnIndex] != zProto.ColumnType_PB_STRING {
+	if (iter.MetaOutColumnTypes[iter.OutRowColumnIndex] != zProto.ColumnType_PB_STRING &&
+		iter.MetaOutColumnTypes[iter.OutRowColumnIndex] != zProto.ColumnType_PB_TIMESTAMP &&
+		iter.MetaOutColumnTypes[iter.OutRowColumnIndex] != zProto.ColumnType_PB_DATE &&
+		iter.MetaOutColumnTypes[iter.OutRowColumnIndex] != zProto.ColumnType_PB_NUMERIC) {
 		iter.PanicTypeAssert(iter.OutRowColumnIndex, iter.ExternalRowNumber, s)
 	}
 	iter.ResultTable.DataNulls = append(iter.ResultTable.DataNulls, false)
 	iter.ResultTable.DataString = append(iter.ResultTable.DataString, s)
 	iter.WriteBufferBytes += uint64(len(s));
+	iter.afterWriteValue()
+	if (iter.WriteBufferBytes > MAX_DATASIZE) {
+		iter.EmitFlush();
+	}
+}
+
+func (iter *ExaIter) EmitValueIntBig(i big.Int) {
+	iter.beforeWriteValue()
+	if iter.MetaOutColumnTypes[iter.OutRowColumnIndex] != zProto.ColumnType_PB_NUMERIC {
+		iter.PanicTypeAssert(iter.OutRowColumnIndex, iter.ExternalRowNumber, i)
+	}
+	iter.ResultTable.DataNulls = append(iter.ResultTable.DataNulls, false)
+	iter.ResultTable.DataString = append(iter.ResultTable.DataString, i.String())
+	iter.WriteBufferBytes += uint64(len(i.String()));
 	iter.afterWriteValue()
 	if (iter.WriteBufferBytes > MAX_DATASIZE) {
 		iter.EmitFlush();

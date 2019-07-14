@@ -14,6 +14,7 @@ import (
 	"runtime/debug"
 	"reflect"
 	"time"
+	"math/big"
 )
 
 var exaContext exago.ExaContext;
@@ -96,10 +97,11 @@ func runProcess(connectionString string) {
 	exaContext.ConnectionId = *exaContext.ZInfoMsg.ConnectionId;
 	exaContext.ExaMeta["ScriptName"] = *exaContext.ZInfoMsg.Info.ScriptName;
 	exaContext.ExaMeta["SourceCode"] = *exaContext.ZInfoMsg.Info.SourceCode;
-	log.Println("Loaded meta: ", exaContext.ExaMeta);
+	log.Println("Loaded info: ", *exaContext.ZInfoMsg);
 
 	metaM := *exago.Comm(exaContext, zProto.MessageType_MT_META, []zProto.MessageType{zProto.MessageType_MT_META}, nil);
 	exaContext.ZMetaMsg = &metaM
+	log.Println("Loaded meta: ", *exaContext.ZMetaMsg);
 
 	var scriptFuncSym = loadScriptFunction(exaContext.ZInfoMsg.Info.SourceCode, exaContext.ZInfoMsg.Info.ScriptName)
 	if *exaContext.ZMetaMsg.Meta.SingleCallMode {
@@ -135,6 +137,19 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 		// function has return
 		switch iter.MetaOutColumnTypes[0] {
 			case zProto.ColumnType_PB_NUMERIC:
+				if *exaContext.ZMetaMsg.Meta.OutputColumns[0].Scale == 0 {
+					if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*big.Int){return nil}) {
+						log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)(*big.Int)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+					}
+					scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*big.Int) )
+					return func() {
+						if result := scriptFunc(iter); result != nil {
+							iter.EmitValueIntBig(*result)
+						} else {
+							iter.EmitValueNull()
+						}
+					}
+				}
 				fallthrough
 			case zProto.ColumnType_PB_STRING:
 				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*string){return nil}) {

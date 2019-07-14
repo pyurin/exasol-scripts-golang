@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 	"unsafe"
+	"math/big"
 )
 
 const ERROR_READING_COLUMN = "Error reading column ";
@@ -120,8 +121,28 @@ func (iter *ExaIter) ReadInt64(colI int) *int64 {
 		case zProto.ColumnType_PB_INT64:
 			return (*int64)(in_row[colI])
 		default:
-			log.Panic(ERROR_READING_COLUMN, "i, ncorrect column ", colI, " type, can't read int64 from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
+			log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read int64 from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
 			return nil;
+	}
+}
+
+func (iter *ExaIter) ReadIntBig(colI int) *big.Int {
+	if colI < 0 || colI >= iter.MetaInRowSize {
+		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.MetaInRowSize)
+	}
+	switch *iter.metaInColumns[colI].Type {
+	case zProto.ColumnType_PB_NUMERIC:
+		if *iter.metaInColumns[colI].Scale == 0 {
+			i := new (big.Int)
+			i.SetString(*(*string)(in_row[colI]), 10)
+			return i
+		} else {
+			log.Panic("Decimal with scale is not supported. Read as string");
+			return nil
+		}
+	default:
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read intBig from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
+		return nil;
 	}
 }
 
@@ -191,6 +212,12 @@ func (iter *ExaIter) ReadString(colI int) *string {
 		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.MetaInRowSize)
 	}
 	switch *iter.metaInColumns[colI].Type {
+	case zProto.ColumnType_PB_DATE:
+		fallthrough
+	case zProto.ColumnType_PB_TIMESTAMP:
+		fallthrough
+	case zProto.ColumnType_PB_NUMERIC:
+		fallthrough
 	case zProto.ColumnType_PB_STRING:
 		return (*string)(in_row[colI]);
 	default:
