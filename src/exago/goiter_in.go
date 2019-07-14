@@ -26,10 +26,16 @@ func (iter *ExaIter) CleanupInput() {
 }
 
 func (iter *ExaIter) Reset() bool {
-	if iter.InZMessage.Next == nil {
-		// if all data rows have been read
-		return false;
+	iter.InZMessage = Comm(iter.exaContext, zProto.MessageType_MT_RESET, []zProto.MessageType{zProto.MessageType_MT_RESET, zProto.MessageType_MT_DONE}, nil)
+	if *iter.InZMessage.Type == zProto.MessageType_MT_DONE {
+		log.Println("ITER.", "iterReset", " - finished")
+		for i, _ := range in_row {
+			in_row[i] = nil;
+		}
+		iter.IsFinished = true;
+		return false
 	}
+	iter.inTable = iter.InZMessage.Next.Table
 	// reset input offsets
 	p := reflect.ValueOf(&iter.inGlobalInputOffsets).Elem()
 	p.Set(reflect.Zero(p.Type()))
@@ -37,7 +43,7 @@ func (iter *ExaIter) Reset() bool {
 	iter.inZMsgRowIndex = 0
 	iter.ExternalRowNumber = iter.InZMessage.Next.Table.RowNumber[iter.inZMsgRowIndex]
 	iter.readRow()
-	return true
+	return true;
 }
 
 var in_row []unsafe.Pointer
@@ -74,7 +80,13 @@ func (iter *ExaIter) Next() bool {
 			return false
 		}
 		iter.inTable = iter.InZMessage.Next.Table
-		iter.Reset();
+		// reset input offsets
+		p := reflect.ValueOf(&iter.inGlobalInputOffsets).Elem()
+		p.Set(reflect.Zero(p.Type()))
+
+		iter.inZMsgRowIndex = 0
+		iter.ExternalRowNumber = iter.InZMessage.Next.Table.RowNumber[iter.inZMsgRowIndex]
+		iter.readRow()
 		return true;
 	} else {
 		//reading next row
