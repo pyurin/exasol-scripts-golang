@@ -10,7 +10,6 @@ import (
 
 type ExaContext struct {
 	ConnectionId uint64
-	ExaMeta map[string]string
 	ZSocket *zmq.Socket
 	ZMetaMsg *zProto.ExascriptResponse
 	ZInfoMsg *zProto.ExascriptResponse

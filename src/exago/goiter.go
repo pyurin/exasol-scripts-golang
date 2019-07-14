@@ -6,50 +6,52 @@ import (
 	"reflect"
 )
 
-const MAX_DATASIZE = 100 * 1000 * 1000;
+const OUTBUF_MAX_SIZE = 100 * 1000 * 1000;
 
 const ERROR_INCOMPATIBLE_RETURN_TYPE = "Return/emit incompatible type";
 const ERROR_INCOMPATIBLE_FUNCTION_FORMAT = "Script function type is not compatible";
 
 type ExaIter struct {
-	IsFinished bool
-	inZMsgRowIndex uint64
-	InZMessage *zProto.ExascriptResponse
-	ExternalRowNumber uint64
 	exaContext ExaContext
-	WriteBufferBytes uint64
-	ResultZMsg *zProto.ExascriptRequest
-	ResultRowsInGroup uint64
-	ResultRows uint64
-	MetaInRowSize int
-	MetaOutRowSize int
-	MetaOutColumnTypes []zProto.ColumnType
-	OutRowColumnIndex int
-	ResultTable *zProto.ExascriptTableData
-	inTable *zProto.ExascriptTableData
-	metaInColumns []*zProto.ExascriptMetadataColumnDefinition
-	inGlobalInputOffsets ExaIterInputOffsets
+	// reader related vars
+	readerIsFinished bool // dataset iteration finished flag
+	readerZMsgRowIndex uint64 // iteration index within input zmsg
+	readerZMsg *zProto.ExascriptResponse // input zmsg
+	readerExtRowNumber uint64 // current db row number - set by reader and used by writer
+	readerRowSize int // length of input row = len(exaContext.ZMetaMsg.Meta.InputColumns)
+	readerColumnsMeta []*zProto.ExascriptMetadataColumnDefinition // = exaContext.ZMetaMsg.Meta.InputColumns
+	readerInputOffsets ExaIterInputOffsets // iterator offsets within data types
+
+	// writer related vars
+	writerBufferLen uint64 // expected len of output msg
+	writerZMsg *zProto.ExascriptRequest // buffer for out msg
+	writerRowsInGroup uint64 // not used yet
+	writerRows uint64 // counter of written rows
+	writerRowColumnIndex int // used for value-by-value emit
+	writerRowSize int
+	writerColumnTypes []zProto.ColumnType // shortcut of PB output column types = exaContext.ZMetaMsg.Meta.OutputColumns[x].Type
+	writerEmitTable *zProto.ExascriptTableData // ref of writerZMsg.Emit.Table
+}
+
+func (iter *ExaIter) GetWriterColumnTypes() []zProto.ColumnType {
+	return iter.writerColumnTypes
 }
 
 /**
-  * Usage: 
-
-  *
-
-  **/
-
+ * Iterator used by run script
+ */
 func NewExaIter(exaContext ExaContext) *ExaIter {
 	iter := &ExaIter{
 		exaContext: exaContext,
-		ResultZMsg: new(zProto.ExascriptRequest),
+		writerZMsg: new(zProto.ExascriptRequest),
 	}
 	iter.ClearResultData();
-	iter.MetaInRowSize = len(iter.exaContext.ZMetaMsg.Meta.InputColumns)
-	iter.metaInColumns = iter.exaContext.ZMetaMsg.Meta.InputColumns
+	iter.readerRowSize = len(iter.exaContext.ZMetaMsg.Meta.InputColumns)
+	iter.readerColumnsMeta = iter.exaContext.ZMetaMsg.Meta.InputColumns
 	for _, colInfo := range iter.exaContext.ZMetaMsg.Meta.OutputColumns {
-		iter.MetaOutColumnTypes = append(iter.MetaOutColumnTypes, *colInfo.Type);
+		iter.writerColumnTypes = append(iter.writerColumnTypes, *colInfo.Type);
 	}
-	iter.MetaOutRowSize = len(iter.exaContext.ZMetaMsg.Meta.OutputColumns)
+	iter.writerRowSize = len(iter.exaContext.ZMetaMsg.Meta.OutputColumns)
 	iter.initInputData();
 	return iter;
 }

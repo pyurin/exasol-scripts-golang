@@ -76,7 +76,6 @@ func init() {
 }
 
 func runProcess(connectionString string) {
-	exaContext.ExaMeta = make(map[string]string);
 	exaContext.ZSocket, _ = zmq.NewSocket(zmq.REQ)
 	err := exaContext.ZSocket.Connect(connectionString)
 	if (err != nil) {
@@ -96,8 +95,6 @@ func runProcess(connectionString string) {
 	infoM := *exago.Comm(exaContext, zProto.MessageType_MT_CLIENT, []zProto.MessageType{zProto.MessageType_MT_INFO}, nil);
 	exaContext.ZInfoMsg = &infoM
 	exaContext.ConnectionId = *exaContext.ZInfoMsg.ConnectionId;
-	exaContext.ExaMeta["ScriptName"] = *exaContext.ZInfoMsg.Info.ScriptName;
-	exaContext.ExaMeta["SourceCode"] = *exaContext.ZInfoMsg.Info.SourceCode;
 	log.Println("Loaded info: ", *exaContext.ZInfoMsg);
 
 	metaM := *exago.Comm(exaContext, zProto.MessageType_MT_META, []zProto.MessageType{zProto.MessageType_MT_META}, nil);
@@ -114,20 +111,6 @@ func runProcess(connectionString string) {
 }
 
 func main() {
-	/*
-	v := `
-			package main
-
-		import (
-			"exago"
-			"reflect"
-			"fmt"
-		)
-
-	loadScriptFunction(&v)
-
-	return;
-	*/
 	if len(os.Args) == 1 {
 		log.Panic("Program run, but no arguments given")
 	}
@@ -139,7 +122,7 @@ func main() {
 func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (func()){
 	if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {
 		// function has return
-		switch iter.MetaOutColumnTypes[0] {
+		switch iter.GetWriterColumnTypes()[0] {
 			case zProto.ColumnType_PB_NUMERIC:
 				if *exaContext.ZMetaMsg.Meta.OutputColumns[0].Scale == 0 {
 					if reflect.TypeOf(scriptFuncSym) == reflect.TypeOf(func(*exago.ExaIter)(*big.Int){return nil}) {
@@ -254,7 +237,7 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 					}
 				}
 			default:
-				log.Panic("Unexpected return type logic: ", iter.MetaOutColumnTypes[0]);
+				log.Panic("Unexpected return type logic: ", iter.GetWriterColumnTypes()[0]);
 		}
 	} else {
 		if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(){}) {
