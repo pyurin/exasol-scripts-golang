@@ -5,91 +5,210 @@ import (
 	"reflect"
 	"log"
 	"time"
+	"unsafe"
 )
 
+const ERROR_READING_COLUMN = "Error reading column ";
+
+type ExaIterInputOffsets struct {
+	Nulls uint64
+	Strings uint64
+	Int32s uint64
+	Int64s uint64
+	Bools uint64
+	Doubles uint64
+}
 
 func (iter *ExaIter) CleanupInput() {
 	iter.IsFinished = false;
-	iter.ZMessage = nil;
-	iter.Rownum = 0;
+	iter.InZMessage = nil;
+	iter.inZMsgRowIndex = 0;
+}
+
+var in_row []unsafe.Pointer
+var in_rowColumns map[string]*unsafe.Pointer
+
+/**
+ * I'm not sure how golang works with unsafe.Pointer to var within func in terms of safety and resource consumpt. - let's use a single row buffer for it
+ */
+var in_rowDataTimeBuf []time.Time
+
+func (iter *ExaIter) initInputData() {
+	in_row = make([]unsafe.Pointer, len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
+	in_rowDataTimeBuf = make([]time.Time, len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
+	in_rowColumns = make(map[string]*unsafe.Pointer)
+	for colI, colInfo := range iter.exaContext.ZMetaMsg.Meta.InputColumns {
+		in_rowColumns[*colInfo.Name] = &in_row[colI];
+	}
 }
 
 func (iter *ExaIter) Next() bool {
 	if (iter.IsFinished) {
 		return false;
 	}
-	if iter.ZMessage == nil || iter.Rownum >= *iter.ZMessage.Next.Table.Rows {
-		iter.ZMessage = Comm(iter.exaContext, zProto.MessageType_MT_NEXT, []zProto.MessageType{zProto.MessageType_MT_NEXT, zProto.MessageType_MT_DONE}, nil)
-		iter.Rownum = 0
+	if iter.inZMsgRowIndex++; iter.InZMessage == nil || iter.inZMsgRowIndex >= *iter.InZMessage.Next.Table.Rows {
+		//need to read first row
+		iter.InZMessage = Comm(iter.exaContext, zProto.MessageType_MT_NEXT, []zProto.MessageType{zProto.MessageType_MT_NEXT, zProto.MessageType_MT_DONE}, nil)
 
-		p := reflect.ValueOf(&iter.InputOffsets).Elem()
-		p.Set(reflect.Zero(p.Type()))
-
-		if *iter.ZMessage.Type == zProto.MessageType_MT_DONE {
+		if *iter.InZMessage.Type == zProto.MessageType_MT_DONE {
 			//log.Println("ITER.", "iterNext", " - finished")
 			iter.IsFinished = true;
 			return false
 		} else {
-			//log.Println("ITER.", "iterNext", " - finished", iter.ZMessage.Next.Table)
+			//log.Println("ITER.", "iterNext", " - finished", iter.InZMessage.Next.Table)
 		}
+		// reset input offsets
+		p := reflect.ValueOf(&iter.inGlobalInputOffsets).Elem()
+		p.Set(reflect.Zero(p.Type()))
 
+		iter.inZMsgRowIndex = 0
+		iter.ExternalRowNumber = iter.InZMessage.Next.Table.RowNumber[iter.inZMsgRowIndex]
+		iter.inTable = iter.InZMessage.Next.Table
+		iter.readRow()
+		return true;
+	} else {
+		//reading next row
+		iter.ExternalRowNumber = iter.InZMessage.Next.Table.RowNumber[iter.inZMsgRowIndex]
+		iter.readRow()
+		return true;
 	}
-	iter.readRow();
-	iter.Rownum++;
-	return true;
+}
+
+func (iter *ExaIter) ReadInt64(colI int) *int64 {
+	if colI < 0 || colI >= iter.MetaInRowSize {
+		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.MetaInRowSize)
+	}
+	switch *iter.metaInColumns[colI].Type {
+		case zProto.ColumnType_PB_INT64:
+			return (*int64)(in_row[colI])
+		default:
+			log.Panic(ERROR_READING_COLUMN, "i, ncorrect column ", colI, " type, can't read int64 from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
+			return nil;
+	}
+}
+
+func (iter *ExaIter) ReadInt32(colI int) *int32 {
+	if colI < 0 || colI >= iter.MetaInRowSize {
+		log.Panic(ERROR_READING_COLUMN, "Index out of bounds, trying to read col ", colI, " in row with size ", iter.MetaInRowSize)
+	}
+	switch *iter.metaInColumns[colI].Type {
+	case zProto.ColumnType_PB_INT32:
+		return (*int32)(in_row[colI])
+	default:
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read int32 from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
+		return nil;
+	}
+}
+
+func (iter *ExaIter) ReadBool(colI int) *bool {
+	if colI < 0 || colI >= iter.MetaInRowSize {
+		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.MetaInRowSize)
+	}
+	switch *iter.metaInColumns[colI].Type {
+	case zProto.ColumnType_PB_BOOLEAN:
+		return (*bool)(in_row[colI])
+	default:
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read bool from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
+		return nil;
+	}
+}
+
+func (iter *ExaIter) ReadFloat64(colI int) *float64 {
+	if colI < 0 || colI >= iter.MetaInRowSize {
+		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.MetaInRowSize)
+	}
+	switch *iter.metaInColumns[colI].Type {
+	case zProto.ColumnType_PB_DOUBLE:
+		return (*float64)(in_row[colI])
+	default:
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read float64 from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
+		return nil;
+	}
+}
+
+func (iter *ExaIter) ReadIsNull(colI int) bool {
+	if colI < 0 || colI >= iter.MetaInRowSize {
+		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.MetaInRowSize)
+	}
+	return (in_row[colI] == nil)
+}
+
+func (iter *ExaIter) ReadTime(colI int) *time.Time {
+	if colI < 0 || colI >= iter.MetaInRowSize {
+		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.MetaInRowSize)
+	}
+	switch *iter.metaInColumns[colI].Type {
+	case zProto.ColumnType_PB_DATE:
+		return (*time.Time)(in_row[colI]);
+	case zProto.ColumnType_PB_TIMESTAMP:
+		return (*time.Time)(in_row[colI]);
+	default:
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read string from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
+		return nil;
+	}
+}
+
+func (iter *ExaIter) ReadString(colI int) *string {
+	if colI < 0 || colI >= iter.MetaInRowSize {
+		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.MetaInRowSize)
+	}
+	switch *iter.metaInColumns[colI].Type {
+	case zProto.ColumnType_PB_STRING:
+		return (*string)(in_row[colI]);
+	default:
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read string from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
+		return nil;
+	}
 }
 
 
 
 //read next row from ZMessage
 func (iter *ExaIter) readRow() {
-	iter.ExternalRowNumber = iter.ZMessage.Next.Table.RowNumber[iter.InputOffsets.ExternalRowNumber];
-	iter.InputOffsets.ExternalRowNumber++;
-
-	for i, colInfo := range iter.exaContext.ZMetaMsg.Meta.InputColumns {
-		isNullValue := iter.ZMessage.Next.Table.DataNulls[ iter.InputOffsets.Nulls ]
-		iter.InputOffsets.Nulls++;
-		if isNullValue {
-			iter.Row[i] = nil;
+	for colI, colInfo := range iter.metaInColumns {
+		if (iter.InZMessage.Next.Table.DataNulls[ iter.inGlobalInputOffsets.Nulls ]) {
+			iter.inGlobalInputOffsets.Nulls++;
+			in_row[colI] = nil;
 		} else {
+			iter.inGlobalInputOffsets.Nulls++;
 			switch *colInfo.Type {
 			case zProto.ColumnType_PB_DOUBLE:
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataDouble[ iter.InputOffsets.Doubles ];
-				iter.InputOffsets.Doubles++;
+				in_row[colI] = unsafe.Pointer(&iter.InZMessage.Next.Table.DataDouble[ iter.inGlobalInputOffsets.Doubles ]);
+				iter.inGlobalInputOffsets.Doubles++;
 			case zProto.ColumnType_PB_INT32:
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataInt32[ iter.InputOffsets.Int32s ];
-				iter.InputOffsets.Int32s++;
+				in_row[colI] = unsafe.Pointer(&iter.InZMessage.Next.Table.DataInt32[ iter.inGlobalInputOffsets.Int32s ]);
+				iter.inGlobalInputOffsets.Int32s++;
 			case zProto.ColumnType_PB_INT64:
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataInt64[ iter.InputOffsets.Int64s ];
-				iter.InputOffsets.Int64s++;
+				in_row[colI] = unsafe.Pointer(&iter.InZMessage.Next.Table.DataInt64[ iter.inGlobalInputOffsets.Int64s ]);
+				iter.inGlobalInputOffsets.Int64s++;
 			case zProto.ColumnType_PB_BOOLEAN:
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataBool[ iter.InputOffsets.Bools ];
-				iter.InputOffsets.Bools++;
+				in_row[colI] = unsafe.Pointer(&iter.InZMessage.Next.Table.DataBool[ iter.inGlobalInputOffsets.Bools ]);
+				iter.inGlobalInputOffsets.Bools++;
 			case zProto.ColumnType_PB_NUMERIC:
-				// @todo I dont know about numeric / decimal types in golang
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ];
-				iter.InputOffsets.Strings++;
+				in_row[colI] = unsafe.Pointer(&iter.InZMessage.Next.Table.DataString[ iter.inGlobalInputOffsets.Strings ]);
+				iter.inGlobalInputOffsets.Strings++;
 			case zProto.ColumnType_PB_TIMESTAMP:
-				var err error;
-				iter.Row[i], err = time.Parse("2006-01-02 15:04:05.999999", iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ])
+				var err error
+				in_rowDataTimeBuf[colI], err = time.Parse("2006-01-02 15:04:05.999999", iter.InZMessage.Next.Table.DataString[ iter.inGlobalInputOffsets.Strings ])
 				if err != nil {
-					log.Panic("Could not parse time ", iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ], "; ", err)
+					log.Panic("Could not parse time ", iter.InZMessage.Next.Table.DataString[ iter.inGlobalInputOffsets.Strings ], "; ", err)
 				}
-				iter.InputOffsets.Strings++;
+				in_row[colI] = unsafe.Pointer(&in_rowDataTimeBuf[colI])
+				iter.inGlobalInputOffsets.Strings++;
 			case zProto.ColumnType_PB_DATE:
-				var err error;
-				iter.Row[i], err = time.Parse("2006-01-02", iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ])
+				var err error
+				in_rowDataTimeBuf[colI], err = time.Parse("2006-01-02", iter.InZMessage.Next.Table.DataString[ iter.inGlobalInputOffsets.Strings ])
 				if err != nil {
-					log.Panic("Could not parse date ", iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ], "; ", err)
+					log.Panic("Could not parse date ", iter.InZMessage.Next.Table.DataString[ iter.inGlobalInputOffsets.Strings ], "; ", err)
 				}
-				iter.InputOffsets.Strings++;
+				in_row[colI] = unsafe.Pointer(&in_rowDataTimeBuf[colI])
+				iter.inGlobalInputOffsets.Strings++;
 			case zProto.ColumnType_PB_STRING:
-				iter.Row[i] =  iter.ZMessage.Next.Table.DataString[ iter.InputOffsets.Strings ];
-				iter.InputOffsets.Strings++;
+				in_row[colI] = unsafe.Pointer(&iter.InZMessage.Next.Table.DataString[ iter.inGlobalInputOffsets.Strings ]);
+				iter.inGlobalInputOffsets.Strings++;
 			default:
 				log.Panic("Unknown column type: ", colInfo.Type);
 			}
 		}
 	}
-	//log.Println("Read row: ", iter.Row);
 }

@@ -87,17 +87,19 @@ func runProcess(connectionString string) {
 			ZErrorMsg.Close = new (zProto.ExascriptClose)
 			ZErrorMsg.Close.ExceptionMessage = &errMsg
 			exago.Comm(exaContext, zProto.MessageType_MT_CLOSE, []zProto.MessageType{zProto.MessageType_MT_CLOSE, zProto.MessageType_MT_FINISHED}, &ZErrorMsg)
-			exaContext.ZSocket.Close()
 		}
+		exaContext.ZSocket.Close()
 	}()
 
-	exaContext.ZInfoMsg = exago.Comm(exaContext, zProto.MessageType_MT_CLIENT, []zProto.MessageType{zProto.MessageType_MT_INFO}, nil);
+	infoM := *exago.Comm(exaContext, zProto.MessageType_MT_CLIENT, []zProto.MessageType{zProto.MessageType_MT_INFO}, nil);
+	exaContext.ZInfoMsg = &infoM
 	exaContext.ConnectionId = *exaContext.ZInfoMsg.ConnectionId;
 	exaContext.ExaMeta["ScriptName"] = *exaContext.ZInfoMsg.Info.ScriptName;
 	exaContext.ExaMeta["SourceCode"] = *exaContext.ZInfoMsg.Info.SourceCode;
 	log.Println("Loaded meta: ", exaContext.ExaMeta);
 
-	exaContext.ZMetaMsg = exago.Comm(exaContext, zProto.MessageType_MT_META, []zProto.MessageType{zProto.MessageType_MT_META}, nil);
+	metaM := *exago.Comm(exaContext, zProto.MessageType_MT_META, []zProto.MessageType{zProto.MessageType_MT_META}, nil);
+	exaContext.ZMetaMsg = &metaM
 
 	var scriptFuncSym = loadScriptFunction(exaContext.ZInfoMsg.Info.SourceCode, exaContext.ZInfoMsg.Info.ScriptName)
 	if *exaContext.ZMetaMsg.Meta.SingleCallMode {
@@ -119,9 +121,6 @@ func main() {
 			"fmt"
 		)
 
-		func Run(iter *exago.ExaIter) interface{} {
-		        return fmt.Sprintln("Type: ", reflect.TypeOf(*iter.RowColumn["kvaal"]), ", row: ", iter.Row, " / ", iter.RowColumn)
-		}`
 	loadScriptFunction(&v)
 
 	return;
@@ -129,9 +128,6 @@ func main() {
 	runProcess(os.Args[1])
 	goPath = os.Args[2]
 	goCache = os.Args[3]
-	defer func() {
-		exaContext.ZSocket.Close()
-	}()
 }
 
 func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (func()){

@@ -16,14 +16,16 @@ type ExaContext struct {
 	ZInfoMsg *zProto.ExascriptResponse
 }
 
+var inZMsg zProto.ExascriptResponse;
+
 func Comm(exaContext ExaContext, reqType zProto.MessageType, expectedTypes []zProto.MessageType, req* zProto.ExascriptRequest) (*zProto.ExascriptResponse) {
 	if req == nil {
 		req = new(zProto.ExascriptRequest)
 	}
 	req.Type = &reqType;
 	req.ConnectionId = &exaContext.ConnectionId;
-	reqBytes, err := proto.Marshal(req)
-	if err != nil {
+	reqBytes, err1 := proto.Marshal(req)
+	if err1 != nil {
 		log.Panic("Failed to compact request")
 	}
 	exaContext.ZSocket.SendBytes(reqBytes, 0)
@@ -34,48 +36,50 @@ func Comm(exaContext ExaContext, reqType zProto.MessageType, expectedTypes []zPr
 		log.Println("No response expected, got ", req.Type)
 		return nil;
 	}
-	var respBytes []byte;
+	var inZMsgBytes []byte;
+	var err2 error;
 	for {
-		respBytes, err = exaContext.ZSocket.RecvBytes(0);
-		if err != nil {
-			switch zmq.AsErrno(err) {
+		inZMsgBytes, err2 = exaContext.ZSocket.RecvBytes(0);
+		if err2 != nil {
+			switch zmq.AsErrno(err2) {
 			case zmq.Errno(syscall.EINTR):
 				log.Println("Cought EINTR error")
 				continue;
 			default:
-				log.Panic("Failed reading zmq: ", err, err.(syscall.Errno))
+				log.Panic("Failed reading zmq: ", err2)
 			}
 		}
 		break;
 	}
-	var resp zProto.ExascriptResponse;
-	err2 := proto.Unmarshal(respBytes, &resp)
-	if err2 != nil {
+	err3 := proto.Unmarshal(inZMsgBytes, &inZMsg)
+	if err3 != nil {
 		log.Panic("Failed to parse request")
 	}
-	log.Println("Received message ", resp.Type)
-	//log.Println("Received message (", b, "): ", resp)
+	log.Println("Received message ", inZMsg.Type)
+	//log.Println("Received message (", b, "): ", inZMsgBuf)
 
-	if (*resp.Type == zProto.MessageType_MT_CLOSE) {
-		log.Panic(resp.Close.ExceptionMessage);
+	if (*inZMsg.Type == zProto.MessageType_MT_CLOSE) {
+		if inZMsg.Close != nil && inZMsg.Close.ExceptionMessage != nil {
+			log.Panic(inZMsg.Close.ExceptionMessage);
+		}
 	}
 
-	if (exaContext.ConnectionId != 0 && exaContext.ConnectionId != *resp.ConnectionId) {
-		log.Panic("Incorrect connection id: ", exaContext.ConnectionId, " / ", resp.ConnectionId);
+	if (exaContext.ConnectionId != 0 && exaContext.ConnectionId != *inZMsg.ConnectionId) {
+		log.Panic("Incorrect connection id: ", exaContext.ConnectionId, " / ", *inZMsg.ConnectionId);
 	}
 
 
 	//check expected type
 	expectedTypeMatched := false
 	for _, expectedType := range expectedTypes {
-		if *resp.Type == expectedType {
+		if *inZMsg.Type == expectedType {
 			expectedTypeMatched = true
 		}
 	}
 	if !expectedTypeMatched {
-		log.Panic("Incorrect response type - expecting ", expectedTypes, ", got ", resp.Type)
+		log.Panic("Incorrect response type - expecting ", expectedTypes, ", got ", inZMsg.Type)
 	}
 
-	return &resp;
+	return &inZMsg;
 
 }

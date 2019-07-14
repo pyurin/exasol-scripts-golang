@@ -64,7 +64,7 @@ func readMsg(zSock *zmq.Socket, flags zmq.Flag, expectedMessageTypes []zProto.Me
         }
         log.Println("EMU Fetched: ", inMsg.Type)
         if (*inMsg.Type == zProto.MessageType_MT_CLOSE) {
-                writeSimpleMsg(zSock, zProto.MessageType_MT_CLOSE)
+                writeSimpleMsg(zSock, zProto.MessageType_MT_FINISHED)
                 log.Println("EMU Fetched exception message: ", *inMsg.Close.ExceptionMessage)
                 return nil, errors.New(*inMsg.Close.ExceptionMessage)
         }
@@ -237,15 +237,15 @@ const CONCAT_STR_FUNC = `
 
         import "exago"
 
-        func Run(iter *exago.ExaIter) interface{} {
+        func Run(iter *exago.ExaIter) *string {
                 var resultS string;
                 for true {
-                        resultS += iter.Row[0].(string)
+                        resultS += *iter.ReadString(0)
                         if !iter.Next() {
                                 break;
                         }
                 }
-                return resultS;
+                return &resultS;
         }
 
 `;
@@ -258,7 +258,7 @@ const SUM_INT_FUNC = `
         import "exago"
         import "log"
 
-        func Run(iter *exago.ExaIter) interface{} {
+        func Run(iter *exago.ExaIter) *int64 {
                 var resultInt int64;
                 for true {
                         switch iter.Row[0].(type) {
@@ -273,7 +273,7 @@ const SUM_INT_FUNC = `
                                 break;
                         }
                 }
-                return resultInt;
+                return &resultInt;
         }
 `;
 
@@ -283,21 +283,17 @@ const SUM_INT_RETURNINT_FUNC = `
         package main
 
         import "exago"
-        import "log"
 
         func Run(iter *exago.ExaIter) *int64 {
                 var resultInt *int64;
                 for true {
-                        switch iter.Row[0].(type) {
-                                case int64:
-                                        if resultInt == nil {
-                                                resultInt = new(int64)
-                                        }
-                                        *resultInt += iter.Row[0].(int64)
-                                case nil:
-                                        break;
-                                default:
-                                      log.Panic("Unknown type for input value, expecting int64")
+                        intval := iter.ReadInt64(0)
+                        if intval != nil {
+                                if resultInt == nil {
+                                        resultInt = new(int64)
+                                }
+                                *resultInt += *intval
+
                         }
                         if !iter.Next() {
                                 break;
@@ -378,7 +374,6 @@ func TestScriptReturningInt64_1(t *testing.T) {
                         log.Fatal("Incorrect return for sum function: ", msg)
                 }
                 writeSimpleMsg(zSock, zProto.MessageType_MT_EMIT)
-
                 writeCommunicationFinalization(t.Fatal, zSock)
         }()
         runProcess(ZSOCKADDR)
@@ -434,12 +429,29 @@ func TestScriptReturningInt64_3(t *testing.T) {
 }
 
 
-func BenchmarkDummy(b *testing.B) {
-        var ints [1000000]int64;
-        for i := b.N; i > 0; i-- {
-                for x := 0; x < 1000 * 1000; x++ {
-                        ints[x] = int64(0)
+func BenchmarkDummy1(b *testing.B) {
+        var inFields []zProto.ExascriptMetadataColumnDefinition;
+        inFields = append(inFields, zProto.ExascriptMetadataColumnDefinition{})
+
+        for a := 0; a < b.N; a++ {
+                for colI, colInfo := range inFields {
+                        _ = colInfo.Type
+                        _ = colI
                 }
+        }
+}
+
+func BenchmarkDummy2(b *testing.B) {
+        var s []int;
+        var s_proto []int;
+        b.StopTimer();
+        for a := 0; a < 1000 * 1000; a++ {
+                s_proto = append(s_proto, a)
+        }
+        b.StartTimer();
+        for i := 0; i < b.N; i++ {
+                s = make([]int, 1000 * 1000)
+                _ = s
         }
 }
 

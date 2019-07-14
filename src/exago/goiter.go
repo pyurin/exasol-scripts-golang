@@ -11,46 +11,30 @@ const MAX_DATASIZE = 100 * 1000 * 1000;
 const ERROR_INCOMPATIBLE_RETURN_TYPE = "Return/emit incompatible type";
 const ERROR_INCOMPATIBLE_FUNCTION_FORMAT = "Script function type is not compatible";
 
-type ExaIterInputOffsets struct {
-	ExternalRowNumber int
-	Nulls int
-	Strings int
-	Int32s int
-	Int64s int
-	Bools int
-	Doubles int
-}
-
 type ExaIter struct {
 	IsFinished bool
-	Rownum uint64
-	ZMessage *zProto.ExascriptResponse
+	inZMsgRowIndex uint64
+	InZMessage *zProto.ExascriptResponse
 	ExternalRowNumber uint64
-	Row []interface{}
-	RowColumn map[string]*interface{}
 	exaContext ExaContext
 	WriteBufferBytes uint64
 	ResultZMsg *zProto.ExascriptRequest
 	ResultRowsInGroup uint64
 	ResultRows uint64
-	InputOffsets ExaIterInputOffsets
+	MetaInRowSize int
 	MetaOutRowSize int
 	MetaOutColumnTypes []zProto.ColumnType
 	OutRowColumnIndex int
 	ResultTable *zProto.ExascriptTableData
+	inTable *zProto.ExascriptTableData
+	metaInColumns []*zProto.ExascriptMetadataColumnDefinition
+	inGlobalInputOffsets ExaIterInputOffsets
 }
 
 /**
   * Usage: 
 
-        func Run(iter *exago.ExaIter) interface{} {
-                fieldByName := iter.RowColumn["fieldKey"])
-                fieldIndex := iter.Row[0]
-        }
-  * 
-
-    @todo optimize array usage in terms of append for input and output
-    @todo inputOffsets - don't use map
+  *
 
   **/
 
@@ -60,15 +44,13 @@ func NewExaIter(exaContext ExaContext) *ExaIter {
 		ResultZMsg: new(zProto.ExascriptRequest),
 	}
 	iter.ClearResultData();
-	iter.Row = make([]interface{}, len(iter.exaContext.ZMetaMsg.Meta.InputColumns), len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
-	iter.RowColumn = make(map[string]*interface{})
-	for colI, colInfo := range iter.exaContext.ZMetaMsg.Meta.InputColumns {
-		iter.RowColumn[*colInfo.Name] = &iter.Row[colI];
-	}
+	iter.MetaInRowSize = len(iter.exaContext.ZMetaMsg.Meta.InputColumns)
+	iter.metaInColumns = iter.exaContext.ZMetaMsg.Meta.InputColumns
 	for _, colInfo := range iter.exaContext.ZMetaMsg.Meta.OutputColumns {
 		iter.MetaOutColumnTypes = append(iter.MetaOutColumnTypes, *colInfo.Type);
 	}
 	iter.MetaOutRowSize = len(iter.exaContext.ZMetaMsg.Meta.OutputColumns)
+	iter.initInputData();
 	return iter;
 }
 
