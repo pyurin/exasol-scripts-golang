@@ -18,9 +18,10 @@ then
 fi
 if [ ! -f $BASEDIR/golauncher ]
 then
-	echo "Building launcher"
+    export GOPATH=$BASEDIR/:$GOPATH
+	echo "Building launcher with GOPATH=$GOPATH"
 	#(GOPATH=$GOPATH:$BASEDIR go build -x -i -o /tmp/golang/golauncher $BASEDIR/*.go)
-	GOPATH=$BASEDIR/:$GOPATH go build -o /tmp/golang/golauncher $BASEDIR/src/*.go
+	go build -o /tmp/golang/golauncher $BASEDIR/src/*.go
 	echo "Build done"
 fi
 /tmp/golang/golauncher $1 $BASEDIR/ /tmp/go_cache/

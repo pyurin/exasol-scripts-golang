@@ -142,7 +142,7 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				fallthrough
 			case zProto.ColumnType_PB_STRING:
 				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*string){return nil}) {
-					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*string)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+					log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)(*string)`, but it's \n", reflect.TypeOf(scriptFuncSym))
 				}
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*string) )
 				return func() {
@@ -154,7 +154,7 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				}
 			case zProto.ColumnType_PB_DOUBLE:
 				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*float64){return nil}) {
-					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*float64)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+					log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)(*float64)`, but it's \n", reflect.TypeOf(scriptFuncSym))
 				}
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*float64) )
 				return func() {
@@ -166,7 +166,7 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				}
 			case zProto.ColumnType_PB_INT32:
 				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*int32){return nil}) {
-					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*int32)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+					log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)(*int32)`, but it's \n", reflect.TypeOf(scriptFuncSym))
 				}
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*int32) )
 				return func() {
@@ -178,7 +178,7 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				}
 			case zProto.ColumnType_PB_BOOLEAN:
 				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*bool){return nil}) {
-					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*bool)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+					log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)(*bool)`, but it's \n", reflect.TypeOf(scriptFuncSym))
 				}
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*bool) )
 				return func() {
@@ -190,7 +190,7 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				}
 			case zProto.ColumnType_PB_INT64:
 				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*int64){return nil}) {
-					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*int64)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+					log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)(*int64)`, but it's \n", reflect.TypeOf(scriptFuncSym))
 				}
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*int64) )
 				return func() {
@@ -204,7 +204,7 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				fallthrough
 			case zProto.ColumnType_PB_TIMESTAMP:
 				if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*time.Time){return nil}) {
-					log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)(*time.Time)`, but it's \n", reflect.TypeOf(scriptFuncSym))
+					log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)(*time.Time)`, but it's \n", reflect.TypeOf(scriptFuncSym))
 				}
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*time.Time) )
 				return func() {
@@ -219,7 +219,7 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 		}
 	} else {
 		if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(){}) {
-			log.Panic("Script function type is not compatible. It must be `func(*exago.ExaIter)` (w/o return), but it's \n", reflect.TypeOf(scriptFuncSym))
+			log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)` (w/o return), but it's \n", reflect.TypeOf(scriptFuncSym))
 		}
 		scriptFunc := scriptFuncSym.(func(*exago.ExaIter)() )
 		return func() {

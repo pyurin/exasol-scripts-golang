@@ -15,6 +15,7 @@ import (
         "strings"
         "exago"
         "io/ioutil"
+        "fmt"
 )
 
 const ZSOCKADDR = "ipc:///tmp/zmqvmcontainer_conn_2240680559578752105"
@@ -63,6 +64,7 @@ func readMsg(zSock *zmq.Socket, flags zmq.Flag, expectedMessageTypes []zProto.Me
         }
         log.Println("EMU Fetched: ", inMsg.Type)
         if (*inMsg.Type == zProto.MessageType_MT_CLOSE) {
+                writeSimpleMsg(zSock, zProto.MessageType_MT_CLOSE)
                 log.Println("EMU Fetched exception message: ", *inMsg.Close.ExceptionMessage)
                 return nil, errors.New(*inMsg.Close.ExceptionMessage)
         }
@@ -592,18 +594,15 @@ func TestFuncIncorrectReturnType(b *testing.T) {
                 defer func() {
                         done<-true
                 }()
-                writeCommunicationInitialization(b.Fatal, zSock, "test_script", CONCAT_STR_FUNC, true, []interface{}{"string1"}, false, []interface{}{int64(0)});
-                readMsgOrFatal(b.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
-                rows := [][]interface{}{{"string"}}
-                writeDataMessage(zSock, &rows)
-                readMsgOrFatal(b.Fatal, zSock, 0, []zProto.MessageType{zProto.MessageType_MT_NEXT})
-                writeSimpleMsg(zSock, zProto.MessageType_MT_DONE)
-                _, err := readMsg(zSock, 0, []zProto.MessageType{zProto.MessageType_MT_EMIT})
-                if err != nil && strings.HasPrefix(err.Error(), exago.ERROR_INCOMPATIBLE_RETURN_TYPE) {
+                var errorGot string;
+                writeCommunicationInitialization(func(err ...interface{}){
+                        errorGot = fmt.Sprint(err...)
+                }, zSock, "test_script", CONCAT_STR_FUNC, true, []interface{}{"string1"}, false, []interface{}{int64(0)});
+                if strings.HasPrefix(errorGot, exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT) {
                         zSock.Close()
                         return;
                 } else {
-                        b.Fatal("Did not get incompatible return type error, got: ", err);
+                        b.Fatal("Did not get incompatible return type error, got: ", errorGot);
                 }
         }()
         runProcess(ZSOCKADDR)
