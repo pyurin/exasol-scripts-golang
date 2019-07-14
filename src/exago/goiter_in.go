@@ -7,6 +7,7 @@ import (
 	"time"
 	"unsafe"
 	"math/big"
+	apd "github.com/cockroachdb/apd"
 )
 
 const ERROR_READING_COLUMN = "Error reading column ";
@@ -123,6 +124,21 @@ func (iter *ExaIter) ReadInt64(colI int) *int64 {
 		default:
 			log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read int64 from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
 			return nil;
+	}
+}
+
+func (iter *ExaIter) ReadDecimalApd(colI int) *apd.Decimal {
+	if colI < 0 || colI >= iter.MetaInRowSize {
+		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.MetaInRowSize)
+	}
+	switch *iter.metaInColumns[colI].Type {
+	case zProto.ColumnType_PB_NUMERIC:
+		var d apd.Decimal;
+		d.SetString(*(*string)(in_row[colI]))
+		return &d
+	default:
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read decimalApd from ", *iter.metaInColumns[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.metaInColumns[colI].Type)])
+		return nil;
 	}
 }
 

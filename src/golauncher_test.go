@@ -16,6 +16,7 @@ import (
         "exago"
         "io/ioutil"
         "fmt"
+        apd "github.com/cockroachdb/apd"
 )
 
 const ZSOCKADDR = "ipc:///tmp/zmqvmcontainer_conn_2240680559578752105"
@@ -380,6 +381,22 @@ func TestScriptReturningInt64_1(t *testing.T) {
         log.Println("Finished test")
 }
 
+
+func TestDecimal(t *testing.T) {
+        var d apd.Decimal
+        d.SetString("101.101")
+        c := apd.BaseContext.WithPrecision(36)
+        for {
+                res, err := c.Quo(&d, &d, apd.New(2, 0))
+                fmt.Printf("d: %s, inexact: %5v, err: %v\n", d.Text('f'), res.Inexact(), err)
+                if err != nil {
+                        return
+                }
+                if res.Inexact() {
+                        return
+                }
+        }
+}
 
 func TestScriptReturningInt64_2(t *testing.T) {
         zSock := initZSocket();

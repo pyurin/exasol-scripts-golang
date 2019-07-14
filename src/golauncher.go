@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"time"
 	"math/big"
+	apd "github.com/cockroachdb/apd"
 )
 
 var exaContext exago.ExaContext;
@@ -127,6 +128,9 @@ func main() {
 
 	return;
 	*/
+	if len(os.Args) == 1 {
+		log.Panic("Program run, but no arguments given")
+	}
 	runProcess(os.Args[1])
 	goPath = os.Args[2]
 	goCache = os.Args[3]
@@ -138,16 +142,40 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 		switch iter.MetaOutColumnTypes[0] {
 			case zProto.ColumnType_PB_NUMERIC:
 				if *exaContext.ZMetaMsg.Meta.OutputColumns[0].Scale == 0 {
-					if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(*big.Int){return nil}) {
+					if reflect.TypeOf(scriptFuncSym) == reflect.TypeOf(func(*exago.ExaIter)(*big.Int){return nil}) {
+						scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*big.Int) )
+						return func() {
+							if result := scriptFunc(iter); result != nil {
+								iter.EmitValueIntBig(*result)
+							} else {
+								iter.EmitValueNull()
+							}
+						}
+					} else {
 						log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)(*big.Int)`, but it's \n", reflect.TypeOf(scriptFuncSym))
 					}
-					scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*big.Int) )
-					return func() {
-						if result := scriptFunc(iter); result != nil {
-							iter.EmitValueIntBig(*result)
-						} else {
-							iter.EmitValueNull()
+				} else {
+					// for decimal with no-zero scale
+					if reflect.TypeOf(scriptFuncSym) == reflect.TypeOf(func(*exago.ExaIter)(*apd.Decimal){return nil}) {
+						scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*apd.Decimal) )
+						return func() {
+							if result := scriptFunc(iter); result != nil {
+								iter.EmitValueDecimalApd(*result)
+							} else {
+								iter.EmitValueNull()
+							}
 						}
+					} else if reflect.TypeOf(scriptFuncSym) == reflect.TypeOf(func(*exago.ExaIter)(*string){return nil}) {
+						scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*string) )
+						return func() {
+							if result := scriptFunc(iter); result != nil {
+								iter.EmitValueString(*result)
+							} else {
+								iter.EmitValueNull()
+							}
+						}
+					} else{
+						log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)(*string)` or `func(*exago.ExaIter)(*apd.Decimal)`, but it's \n", reflect.TypeOf(scriptFuncSym))
 					}
 				}
 				fallthrough

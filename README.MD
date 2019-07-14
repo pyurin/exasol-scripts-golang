@@ -59,7 +59,9 @@ give expected results within that time and files will be missing.
 
 ```
 #for further work with docker image you can print
-#	docker start exasol-scripts-golang-container && docker exec -it  exasol-scripts-golang-container /bin/bash
+# docker stop exasol-scripts-golang-container; docker rm exasol-scripts-golang-container
+# docker run --name exasol-scripts-golang-container -it -v `pwd`:/exasol-script-languages/ exasol-scripts-golang-image /bin/bash
+# and `export GOPATH=$GOPATH:/exasol-script-languages/` in container
 ```
 
 ## 2. Upload scripts

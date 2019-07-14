@@ -17,6 +17,8 @@ COPY src/zmqcontainer /var/lib/go/src/zmqcontainer
 COPY src/golauncher.go /tmp/golauncher.go
 
 RUN \
+  go get github.com/cockroachdb/apd && \
+  go install github.com/cockroachdb/apd &&\
   go get github.com/pebbe/zmq2 && \
   go install github.com/pebbe/zmq2 && \
   go get github.com/golang/protobuf/proto && \

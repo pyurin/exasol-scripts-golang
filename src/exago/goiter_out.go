@@ -6,6 +6,7 @@ import (
 	"time"
 	"math"
 	"math/big"
+	apd "github.com/cockroachdb/apd"
 )
 
 
@@ -265,14 +266,30 @@ func (iter *ExaIter) EmitValueString(s string) {
 	}
 }
 
+func (iter *ExaIter) EmitValueDecimalApd(d apd.Decimal) {
+	iter.beforeWriteValue()
+	if iter.MetaOutColumnTypes[iter.OutRowColumnIndex] != zProto.ColumnType_PB_NUMERIC {
+		iter.PanicTypeAssert(iter.OutRowColumnIndex, iter.ExternalRowNumber, d)
+	}
+	iter.ResultTable.DataNulls = append(iter.ResultTable.DataNulls, false)
+	strVal := d.Text('f')
+	iter.ResultTable.DataString = append(iter.ResultTable.DataString, strVal)
+	iter.WriteBufferBytes += uint64(len(strVal));
+	iter.afterWriteValue()
+	if (iter.WriteBufferBytes > MAX_DATASIZE) {
+		iter.EmitFlush();
+	}
+}
+
 func (iter *ExaIter) EmitValueIntBig(i big.Int) {
 	iter.beforeWriteValue()
 	if iter.MetaOutColumnTypes[iter.OutRowColumnIndex] != zProto.ColumnType_PB_NUMERIC {
 		iter.PanicTypeAssert(iter.OutRowColumnIndex, iter.ExternalRowNumber, i)
 	}
 	iter.ResultTable.DataNulls = append(iter.ResultTable.DataNulls, false)
-	iter.ResultTable.DataString = append(iter.ResultTable.DataString, i.String())
-	iter.WriteBufferBytes += uint64(len(i.String()));
+	strVal := i.String()
+	iter.ResultTable.DataString = append(iter.ResultTable.DataString, strVal)
+	iter.WriteBufferBytes += uint64(len(strVal));
 	iter.afterWriteValue()
 	if (iter.WriteBufferBytes > MAX_DATASIZE) {
 		iter.EmitFlush();
