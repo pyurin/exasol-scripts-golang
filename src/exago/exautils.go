@@ -16,7 +16,6 @@ type ExaContext struct {
 	ZInfoMsg *zProto.ExascriptResponse
 }
 
-var inZMsg zProto.ExascriptResponse;
 
 func Comm(exaContext ExaContext, reqType zProto.MessageType, expectedTypes []zProto.MessageType, req* zProto.ExascriptRequest) (*zProto.ExascriptResponse) {
 	if req == nil {
@@ -51,6 +50,7 @@ func Comm(exaContext ExaContext, reqType zProto.MessageType, expectedTypes []zPr
 		}
 		break;
 	}
+	var inZMsg zProto.ExascriptResponse;
 	err3 := proto.Unmarshal(inZMsgBytes, &inZMsg)
 	if err3 != nil {
 		log.Panic("Failed to parse request")

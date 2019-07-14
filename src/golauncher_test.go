@@ -311,8 +311,8 @@ const GENERATE_SERIES_EMITROW_FUNC = `
         import "exago"
 
         func Run(iter *exago.ExaIter) {
-                offsetTo := iter.Row[1].(int64)
-                offsetFrom := iter.Row[0].(int64)
+                offsetFrom := *iter.ReadInt64(0)
+                offsetTo := *iter.ReadInt64(1)
                 for i := offsetFrom; i < offsetTo; i++ {
                         iter.Emit(i)
                 }
@@ -325,8 +325,8 @@ const GENERATE_SERIES_EMITVAL_FUNC = `
         import "exago"
 
         func Run(iter *exago.ExaIter) {
-                offsetTo := iter.Row[1].(int64)
-                offsetFrom := iter.Row[0].(int64)
+                offsetFrom := *iter.ReadInt64(0)
+                offsetTo := *iter.ReadInt64(1)
                 for i := offsetFrom; i < offsetTo; i++ {
                         iter.EmitValueInt64(i)
                 }
