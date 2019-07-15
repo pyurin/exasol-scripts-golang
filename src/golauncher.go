@@ -22,6 +22,65 @@ var exaContext exago.ExaContext;
 var goPath string;
 var goCache string;
 
+func init() {
+	// zproto initialization is renamed to be called only once, otherwise when script is loaded, it's initialized again
+	zProto.Initialize();
+}
+
+func main() {
+	if len(os.Args) == 1 {
+		log.Panic("Program run, but no arguments given")
+	}
+	goPath = os.Args[2]
+	goCache = os.Args[3]
+	runProcess(os.Args[1])
+}
+
+
+func runProcess(connectionString string) {
+	exaContext.ZSocket, _ = zmq.NewSocket(zmq.REQ)
+	connErr := exaContext.ZSocket.Connect(connectionString)
+	if (connErr != nil) {
+		log.Panic("Failed connecting zmq at ", connectionString, ": ", connErr)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			var ZErrorMsg zProto.ExascriptRequest
+			errMsg := fmt.Sprint(r, "\nStack trace:\n", string(debug.Stack()))
+			ZErrorMsg.Close = new (zProto.ExascriptClose)
+			ZErrorMsg.Close.ExceptionMessage = &errMsg
+			exago.Comm(exaContext, zProto.MessageType_MT_CLOSE, []zProto.MessageType{zProto.MessageType_MT_CLOSE, zProto.MessageType_MT_FINISHED}, &ZErrorMsg)
+			exaContext.ZSocket.Close()
+		}
+		exaContext.ZSocket.Close()
+	}()
+
+	// mt_client init message
+	infoM := *exago.Comm(exaContext, zProto.MessageType_MT_CLIENT, []zProto.MessageType{zProto.MessageType_MT_INFO}, nil);
+	exaContext.ZInfoMsg = &infoM
+	exaContext.ConnectionId = *exaContext.ZInfoMsg.ConnectionId;
+	log.Println("Loaded info: ", *exaContext.ZInfoMsg);
+
+	// mt_meta init message
+	metaM := *exago.Comm(exaContext, zProto.MessageType_MT_META, []zProto.MessageType{zProto.MessageType_MT_META}, nil);
+	exaContext.ZMetaMsg = &metaM
+	log.Println("Loaded meta: ", *exaContext.ZMetaMsg);
+
+	// run script
+	var scriptFuncSym = loadScriptFunction(exaContext.ZInfoMsg.Info.SourceCode, exaContext.ZInfoMsg.Info.ScriptName)
+	if *exaContext.ZMetaMsg.Meta.SingleCallMode {
+		singleCallIteration(scriptFuncSym);
+	} else {
+		multiCallIteration(scriptFuncSym);
+	}
+
+	// finish
+	exago.Comm(exaContext, zProto.MessageType_MT_FINISHED, []zProto.MessageType{zProto.MessageType_MT_FINISHED}, nil)
+}
+
+/**
+ * Loads go script and gets Run function - compile an external lib and load with plugin
+ */
 func loadScriptFunction(scriptSrc *string, scriptName *string) plugin.Symbol {
 	pluginFile := loadScriptFunction_compilePluginUncached(scriptSrc, scriptName)
 	p, err := plugin.Open(pluginFile)
@@ -35,6 +94,12 @@ func loadScriptFunction(scriptSrc *string, scriptName *string) plugin.Symbol {
 	return scriptFuncSym;
 }
 
+/**
+ * Loads script and gets Run function.
+
+ * I was searching for some optimization - caching, or pre-compilation of modules, but could not make it well.
+ * So here we just compile everything in place
+ */
 func loadScriptFunction_compilePluginUncached(scriptSrc *string, scriptName *string) string {
 	tmpDir, err := ioutil.TempDir("", "golang")
 	if err != nil {
@@ -71,57 +136,15 @@ func loadScriptFunction_compilePluginUncached(scriptSrc *string, scriptName *str
 	return pluginFile;
 }
 
-func init() {
-	zProto.Initialize();
-}
-
-func runProcess(connectionString string) {
-	exaContext.ZSocket, _ = zmq.NewSocket(zmq.REQ)
-	err := exaContext.ZSocket.Connect(connectionString)
-	if (err != nil) {
-		log.Panic("Failed connecting zmq at ", connectionString, ": ", err)
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			var ZErrorMsg zProto.ExascriptRequest
-			errMsg := fmt.Sprint(r, "\nStack trace:\n", string(debug.Stack()))
-			ZErrorMsg.Close = new (zProto.ExascriptClose)
-			ZErrorMsg.Close.ExceptionMessage = &errMsg
-			exago.Comm(exaContext, zProto.MessageType_MT_CLOSE, []zProto.MessageType{zProto.MessageType_MT_CLOSE, zProto.MessageType_MT_FINISHED}, &ZErrorMsg)
-		}
-		exaContext.ZSocket.Close()
-	}()
-
-	infoM := *exago.Comm(exaContext, zProto.MessageType_MT_CLIENT, []zProto.MessageType{zProto.MessageType_MT_INFO}, nil);
-	exaContext.ZInfoMsg = &infoM
-	exaContext.ConnectionId = *exaContext.ZInfoMsg.ConnectionId;
-	log.Println("Loaded info: ", *exaContext.ZInfoMsg);
-
-	metaM := *exago.Comm(exaContext, zProto.MessageType_MT_META, []zProto.MessageType{zProto.MessageType_MT_META}, nil);
-	exaContext.ZMetaMsg = &metaM
-	log.Println("Loaded meta: ", *exaContext.ZMetaMsg);
-
-	var scriptFuncSym = loadScriptFunction(exaContext.ZInfoMsg.Info.SourceCode, exaContext.ZInfoMsg.Info.ScriptName)
-	if *exaContext.ZMetaMsg.Meta.SingleCallMode {
-		singleCallIteration(scriptFuncSym);
-	} else {
-		multiCallIteration(scriptFuncSym);
-	}
-	exago.Comm(exaContext, zProto.MessageType_MT_FINISHED, []zProto.MessageType{zProto.MessageType_MT_FINISHED}, nil)
-}
-
-func main() {
-	if len(os.Args) == 1 {
-		log.Panic("Program run, but no arguments given")
-	}
-	runProcess(os.Args[1])
-	goPath = os.Args[2]
-	goCache = os.Args[3]
-}
-
-func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (func()){
+/**
+ * Returns closure that executes Run function with required params and emits return of the function if any.
+ */
+func getScriptRunFunction(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (func()){
 	if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {
-		// function has return
+		/*
+		 * function has return
+		 * This huge block maps function return to ExaIter.Emit* function
+		 */
 		switch iter.GetWriterColumnTypes()[0] {
 			case zProto.ColumnType_PB_NUMERIC:
 				if *exaContext.ZMetaMsg.Meta.OutputColumns[0].Scale == 0 {
@@ -129,9 +152,9 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 						scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*big.Int) )
 						return func() {
 							if result := scriptFunc(iter); result != nil {
-								iter.EmitValueIntBig(*result)
+								iter.EmitIntBig(*result)
 							} else {
-								iter.EmitValueNull()
+								iter.EmitNull()
 							}
 						}
 					} else {
@@ -143,18 +166,18 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 						scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*apd.Decimal) )
 						return func() {
 							if result := scriptFunc(iter); result != nil {
-								iter.EmitValueDecimalApd(*result)
+								iter.EmitDecimalApd(*result)
 							} else {
-								iter.EmitValueNull()
+								iter.EmitNull()
 							}
 						}
 					} else if reflect.TypeOf(scriptFuncSym) == reflect.TypeOf(func(*exago.ExaIter)(*string){return nil}) {
 						scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*string) )
 						return func() {
 							if result := scriptFunc(iter); result != nil {
-								iter.EmitValueString(*result)
+								iter.EmitString(*result)
 							} else {
-								iter.EmitValueNull()
+								iter.EmitNull()
 							}
 						}
 					} else{
@@ -169,9 +192,9 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*string) )
 				return func() {
 					if result := scriptFunc(iter); result != nil {
-						iter.EmitValueString(*result)
+						iter.EmitString(*result)
 					} else {
-						iter.EmitValueNull()
+						iter.EmitNull()
 					}
 				}
 			case zProto.ColumnType_PB_DOUBLE:
@@ -181,9 +204,9 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*float64) )
 				return func() {
 					if result := scriptFunc(iter); result != nil {
-						iter.EmitValueFloat64(*result)
+						iter.EmitFloat64(*result)
 					} else {
-						iter.EmitValueNull()
+						iter.EmitNull()
 					}
 				}
 			case zProto.ColumnType_PB_INT32:
@@ -193,9 +216,9 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*int32) )
 				return func() {
 					if result := scriptFunc(iter); result != nil {
-						iter.EmitValueInt32(*result)
+						iter.EmitInt32(*result)
 					} else {
-						iter.EmitValueNull()
+						iter.EmitNull()
 					}
 				}
 			case zProto.ColumnType_PB_BOOLEAN:
@@ -205,9 +228,9 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*bool) )
 				return func() {
 					if result := scriptFunc(iter); result != nil {
-						iter.EmitValueBool(*result)
+						iter.EmitBool(*result)
 					} else {
-						iter.EmitValueNull()
+						iter.EmitNull()
 					}
 				}
 			case zProto.ColumnType_PB_INT64:
@@ -217,9 +240,9 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*int64) )
 				return func() {
 					if result := scriptFunc(iter); result != nil {
-						iter.EmitValueInt64(*result)
+						iter.EmitInt64(*result)
 					} else {
-						iter.EmitValueNull()
+						iter.EmitNull()
 					}
 				}
 			case zProto.ColumnType_PB_DATE:
@@ -231,15 +254,16 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 				scriptFunc := scriptFuncSym.(func(*exago.ExaIter)(*time.Time) )
 				return func() {
 					if result := scriptFunc(iter); result != nil {
-						iter.EmitValueTime(*result)
+						iter.EmitTime(*result)
 					} else {
-						iter.EmitValueNull()
+						iter.EmitNull()
 					}
 				}
 			default:
 				log.Panic("Unexpected return type logic: ", iter.GetWriterColumnTypes()[0]);
 		}
 	} else {
+		// function does not have return - much simpler)
 		if reflect.TypeOf(scriptFuncSym) != reflect.TypeOf(func(*exago.ExaIter)(){}) {
 			log.Panic(exago.ERROR_INCOMPATIBLE_FUNCTION_FORMAT, " It must be `func(*exago.ExaIter)` (w/o return), but it's \n", reflect.TypeOf(scriptFuncSym))
 		}
@@ -255,13 +279,13 @@ func getExecuteScriptFunc(iter *exago.ExaIter, scriptFuncSym plugin.Symbol) (fun
 
 func multiCallIteration(scriptFuncSym plugin.Symbol) {
 	iter := exago.NewExaIter(exaContext)
-	localExecuteScriptFunc := getExecuteScriptFunc(iter, scriptFuncSym)
+	scriptRunFunction := getScriptRunFunction(iter, scriptFuncSym)
 	for true {
 		resp := exago.Comm(exaContext, zProto.MessageType_MT_RUN, []zProto.MessageType{zProto.MessageType_MT_RUN,zProto.MessageType_MT_CLEANUP}, nil)
 		if *resp.Type == zProto.MessageType_MT_CLEANUP {
 			break;
 		} else if *resp.Type == zProto.MessageType_MT_RUN {
-			iter.CleanupInput()
+			iter.ReaderCleanup()
 			if iter.Next() == false {
 				log.Panic("Failed reading first row")
 			}
@@ -269,7 +293,7 @@ func multiCallIteration(scriptFuncSym plugin.Symbol) {
 				if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {
 					// script (ROW) RETURNS
 					for true {
-						localExecuteScriptFunc();
+						scriptRunFunction();
 						if iter.Next() {
 							//log.Println("Fetching next row - row found")
 						} else {
@@ -283,7 +307,7 @@ func multiCallIteration(scriptFuncSym plugin.Symbol) {
 					for true {
 						//scriptFunc := scriptFuncSym.(func(*exago.ExaIter)() )
 						//scriptFunc(iter);
-						localExecuteScriptFunc();
+						scriptRunFunction();
 						if iter.Next() == false {
 							break;
 						}
@@ -292,10 +316,10 @@ func multiCallIteration(scriptFuncSym plugin.Symbol) {
 			}
 			if *exaContext.ZMetaMsg.Meta.InputIterType == zProto.IterType_PB_MULTIPLE {
 				if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {
-					localExecuteScriptFunc();
+					scriptRunFunction();
 				}
 				if *exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_MULTIPLE {
-					localExecuteScriptFunc();
+					scriptRunFunction();
 				}
 			}
 			iter.EmitFlush()

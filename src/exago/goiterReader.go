@@ -21,17 +21,34 @@ type ExaIterInputOffsets struct {
 	Doubles uint64
 }
 
-func (iter *ExaIter) CleanupInput() {
+/**
+ * Cleaning up after MT_RUN
+ */
+func (iter *ExaIter) ReaderCleanup() {
 	iter.readerIsFinished = false;
 	iter.readerZMsg = nil;
 	iter.readerZMsgRowIndex = 0;
 }
 
+
+func (iter *ExaIter) initInputData() {
+	iter.readerRow = make([]unsafe.Pointer, len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
+	iter.readerRowDataTimeBuf = make([]time.Time, len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
+	iter.readerRowColumns = make(map[string]*unsafe.Pointer)
+	for colI, colInfo := range iter.exaContext.ZMetaMsg.Meta.InputColumns {
+		iter.readerRowColumns[*colInfo.Name] = &iter.readerRow[colI];
+	}
+}
+
+
+/**
+ * Resets data iteration with MT_RESET message and reads first row
+ */
 func (iter *ExaIter) Reset() bool {
 	iter.readerZMsg = Comm(iter.exaContext, zProto.MessageType_MT_RESET, []zProto.MessageType{zProto.MessageType_MT_RESET, zProto.MessageType_MT_DONE}, nil)
 	if *iter.readerZMsg.Type == zProto.MessageType_MT_DONE {
-		for i, _ := range in_row {
-			in_row[i] = nil;
+		for i, _ := range iter.readerRow {
+			iter.readerRow[i] = nil;
 		}
 		iter.readerIsFinished = true;
 		return false
@@ -47,23 +64,9 @@ func (iter *ExaIter) Reset() bool {
 	return true;
 }
 
-var in_row []unsafe.Pointer
-var in_rowColumns map[string]*unsafe.Pointer
-
 /**
- * I'm not sure how golang works with unsafe.Pointer to var within func in terms of safety and resource consumpt. - let's use a single row buffer for it
+ * General iterator func - walks through current reader ZMsg and fetches next if necessary
  */
-var in_rowDataTimeBuf []time.Time
-
-func (iter *ExaIter) initInputData() {
-	in_row = make([]unsafe.Pointer, len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
-	in_rowDataTimeBuf = make([]time.Time, len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
-	in_rowColumns = make(map[string]*unsafe.Pointer)
-	for colI, colInfo := range iter.exaContext.ZMetaMsg.Meta.InputColumns {
-		in_rowColumns[*colInfo.Name] = &in_row[colI];
-	}
-}
-
 func (iter *ExaIter) Next() bool {
 	if (iter.readerIsFinished) {
 		return false;
@@ -74,8 +77,8 @@ func (iter *ExaIter) Next() bool {
 
 		if *iter.readerZMsg.Type == zProto.MessageType_MT_DONE {
 			log.Println("ITER.", "iterNext", " - finished")
-			for i, _ := range in_row {
-				in_row[i] = nil;
+			for i, _ := range iter.readerRow {
+				iter.readerRow[i] = nil;
 			}
 			iter.readerIsFinished = true;
 			return false
@@ -96,10 +99,6 @@ func (iter *ExaIter) Next() bool {
 	}
 }
 
-func (iter *ExaIter) GetRowIndex() uint64 {
-	return iter.readerZMsgRowIndex
-}
-
 func (iter *ExaIter) Size() uint64 {
 	if iter.readerZMsg == nil {
 		log.Panic("Can't get Size() because readerZMsg is empty");
@@ -118,7 +117,7 @@ func (iter *ExaIter) ReadInt64(colI int) *int64 {
 	}
 	switch *iter.readerColumnsMeta[colI].Type {
 		case zProto.ColumnType_PB_INT64:
-			return (*int64)(in_row[colI])
+			return (*int64)(iter.readerRow[colI])
 		default:
 			log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read int64 from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 			return nil;
@@ -132,7 +131,7 @@ func (iter *ExaIter) ReadDecimalApd(colI int) *apd.Decimal {
 	switch *iter.readerColumnsMeta[colI].Type {
 	case zProto.ColumnType_PB_NUMERIC:
 		var d apd.Decimal;
-		d.SetString(*(*string)(in_row[colI]))
+		d.SetString(*(*string)(iter.readerRow[colI]))
 		return &d
 	default:
 		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read decimalApd from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
@@ -148,7 +147,7 @@ func (iter *ExaIter) ReadIntBig(colI int) *big.Int {
 	case zProto.ColumnType_PB_NUMERIC:
 		if *iter.readerColumnsMeta[colI].Scale == 0 {
 			i := new (big.Int)
-			i.SetString(*(*string)(in_row[colI]), 10)
+			i.SetString(*(*string)(iter.readerRow[colI]), 10)
 			return i
 		} else {
 			log.Panic("Decimal with scale is not supported. Read as string");
@@ -166,7 +165,7 @@ func (iter *ExaIter) ReadInt32(colI int) *int32 {
 	}
 	switch *iter.readerColumnsMeta[colI].Type {
 	case zProto.ColumnType_PB_INT32:
-		return (*int32)(in_row[colI])
+		return (*int32)(iter.readerRow[colI])
 	default:
 		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read int32 from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
@@ -179,7 +178,7 @@ func (iter *ExaIter) ReadBool(colI int) *bool {
 	}
 	switch *iter.readerColumnsMeta[colI].Type {
 	case zProto.ColumnType_PB_BOOLEAN:
-		return (*bool)(in_row[colI])
+		return (*bool)(iter.readerRow[colI])
 	default:
 		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read bool from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
@@ -192,7 +191,7 @@ func (iter *ExaIter) ReadFloat64(colI int) *float64 {
 	}
 	switch *iter.readerColumnsMeta[colI].Type {
 	case zProto.ColumnType_PB_DOUBLE:
-		return (*float64)(in_row[colI])
+		return (*float64)(iter.readerRow[colI])
 	default:
 		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read float64 from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
@@ -203,7 +202,7 @@ func (iter *ExaIter) ReadIsNull(colI int) bool {
 	if colI < 0 || colI >= iter.readerRowSize {
 		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.readerRowSize)
 	}
-	return (in_row[colI] == nil)
+	return (iter.readerRow[colI] == nil)
 }
 
 func (iter *ExaIter) ReadTime(colI int) *time.Time {
@@ -212,9 +211,9 @@ func (iter *ExaIter) ReadTime(colI int) *time.Time {
 	}
 	switch *iter.readerColumnsMeta[colI].Type {
 	case zProto.ColumnType_PB_DATE:
-		return (*time.Time)(in_row[colI]);
+		return (*time.Time)(iter.readerRow[colI]);
 	case zProto.ColumnType_PB_TIMESTAMP:
-		return (*time.Time)(in_row[colI]);
+		return (*time.Time)(iter.readerRow[colI]);
 	default:
 		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read string from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
@@ -233,7 +232,7 @@ func (iter *ExaIter) ReadString(colI int) *string {
 	case zProto.ColumnType_PB_NUMERIC:
 		fallthrough
 	case zProto.ColumnType_PB_STRING:
-		return (*string)(in_row[colI]);
+		return (*string)(iter.readerRow[colI]);
 	default:
 		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read string from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
@@ -242,48 +241,50 @@ func (iter *ExaIter) ReadString(colI int) *string {
 
 
 
-//read next row from ZMessage
+/**
+ * Reads message from readerZMsg and puts into iter.readerRow for further reading with iter.Read* functions
+ */
 func (iter *ExaIter) readRow() {
 	for colI, colInfo := range iter.readerColumnsMeta {
 		if (iter.readerZMsg.Next.Table.DataNulls[ iter.readerInputOffsets.Nulls ]) {
 			iter.readerInputOffsets.Nulls++;
-			in_row[colI] = nil;
+			iter.readerRow[colI] = nil;
 		} else {
 			iter.readerInputOffsets.Nulls++;
 			switch *colInfo.Type {
 			case zProto.ColumnType_PB_DOUBLE:
-				in_row[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataDouble[ iter.readerInputOffsets.Doubles ]);
+				iter.readerRow[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataDouble[ iter.readerInputOffsets.Doubles ]);
 				iter.readerInputOffsets.Doubles++;
 			case zProto.ColumnType_PB_INT32:
-				in_row[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataInt32[ iter.readerInputOffsets.Int32s ]);
+				iter.readerRow[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataInt32[ iter.readerInputOffsets.Int32s ]);
 				iter.readerInputOffsets.Int32s++;
 			case zProto.ColumnType_PB_INT64:
-				in_row[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataInt64[ iter.readerInputOffsets.Int64s ]);
+				iter.readerRow[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataInt64[ iter.readerInputOffsets.Int64s ]);
 				iter.readerInputOffsets.Int64s++;
 			case zProto.ColumnType_PB_BOOLEAN:
-				in_row[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataBool[ iter.readerInputOffsets.Bools ]);
+				iter.readerRow[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataBool[ iter.readerInputOffsets.Bools ]);
 				iter.readerInputOffsets.Bools++;
 			case zProto.ColumnType_PB_NUMERIC:
-				in_row[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataString[ iter.readerInputOffsets.Strings ]);
+				iter.readerRow[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataString[ iter.readerInputOffsets.Strings ]);
 				iter.readerInputOffsets.Strings++;
 			case zProto.ColumnType_PB_TIMESTAMP:
 				var err error
-				in_rowDataTimeBuf[colI], err = time.Parse("2006-01-02 15:04:05.999999", iter.readerZMsg.Next.Table.DataString[ iter.readerInputOffsets.Strings ])
+				iter.readerRowDataTimeBuf[colI], err = time.Parse("2006-01-02 15:04:05.999999", iter.readerZMsg.Next.Table.DataString[ iter.readerInputOffsets.Strings ])
 				if err != nil {
 					log.Panic("Could not parse time ", iter.readerZMsg.Next.Table.DataString[ iter.readerInputOffsets.Strings ], "; ", err)
 				}
-				in_row[colI] = unsafe.Pointer(&in_rowDataTimeBuf[colI])
+				iter.readerRow[colI] = unsafe.Pointer(&iter.readerRowDataTimeBuf[colI])
 				iter.readerInputOffsets.Strings++;
 			case zProto.ColumnType_PB_DATE:
 				var err error
-				in_rowDataTimeBuf[colI], err = time.Parse("2006-01-02", iter.readerZMsg.Next.Table.DataString[ iter.readerInputOffsets.Strings ])
+				iter.readerRowDataTimeBuf[colI], err = time.Parse("2006-01-02", iter.readerZMsg.Next.Table.DataString[ iter.readerInputOffsets.Strings ])
 				if err != nil {
 					log.Panic("Could not parse date ", iter.readerZMsg.Next.Table.DataString[ iter.readerInputOffsets.Strings ], "; ", err)
 				}
-				in_row[colI] = unsafe.Pointer(&in_rowDataTimeBuf[colI])
+				iter.readerRow[colI] = unsafe.Pointer(&iter.readerRowDataTimeBuf[colI])
 				iter.readerInputOffsets.Strings++;
 			case zProto.ColumnType_PB_STRING:
-				in_row[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataString[ iter.readerInputOffsets.Strings ]);
+				iter.readerRow[colI] = unsafe.Pointer(&iter.readerZMsg.Next.Table.DataString[ iter.readerInputOffsets.Strings ]);
 				iter.readerInputOffsets.Strings++;
 			default:
 				log.Panic("Unknown column type: ", colInfo.Type);

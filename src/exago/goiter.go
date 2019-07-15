@@ -4,6 +4,8 @@ import (
 	zProto "zmqcontainer"
 	"log"
 	"reflect"
+	"time"
+	"unsafe"
 )
 
 const OUTBUF_MAX_SIZE = 100 * 1000 * 1000;
@@ -21,6 +23,9 @@ type ExaIter struct {
 	readerRowSize int // length of input row = len(exaContext.ZMetaMsg.Meta.InputColumns)
 	readerColumnsMeta []*zProto.ExascriptMetadataColumnDefinition // = exaContext.ZMetaMsg.Meta.InputColumns
 	readerInputOffsets ExaIterInputOffsets // iterator offsets within data types
+	readerRowDataTimeBuf []time.Time // I'm not sure how golang works with unsafe.Pointer to var within func in terms of safety and resource consumpt. - let's use a single row buffer for it
+	readerRow []unsafe.Pointer
+	readerRowColumns map[string]*unsafe.Pointer
 
 	// writer related vars
 	writerBufferLen uint64 // expected len of output msg
@@ -33,9 +38,6 @@ type ExaIter struct {
 	writerEmitTable *zProto.ExascriptTableData // ref of writerZMsg.Emit.Table
 }
 
-func (iter *ExaIter) GetWriterColumnTypes() []zProto.ColumnType {
-	return iter.writerColumnTypes
-}
 
 /**
  * Iterator used by run script
@@ -56,6 +58,10 @@ func NewExaIter(exaContext ExaContext) *ExaIter {
 	return iter;
 }
 
+
+func (iter *ExaIter) GetWriterColumnTypes() []zProto.ColumnType {
+	return iter.writerColumnTypes
+}
 
 func (iter *ExaIter) PanicTypeAssert(fieldI int, extRowNum uint64, realVal interface{}) {
 	if  *iter.exaContext.ZMetaMsg.Meta.OutputIterType == zProto.IterType_PB_EXACTLY_ONCE {

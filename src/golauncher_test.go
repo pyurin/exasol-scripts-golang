@@ -329,7 +329,7 @@ const GENERATE_SERIES_EMITVAL_FUNC = `
                 offsetFrom := *iter.ReadInt64(0)
                 offsetTo := *iter.ReadInt64(1)
                 for i := offsetFrom; i < offsetTo; i++ {
-                        iter.EmitValueInt64(i)
+                        iter.EmitInt64(i)
                 }
         }
 `;
@@ -573,7 +573,7 @@ func BenchmarkGenerateSeriesWithEmitRow(b *testing.B) {
         benchmarkGenerateSeriesBase(b, GENERATE_SERIES_EMITROW_FUNC);
 }
 
-func BenchmarkGenerateSeriesWithEmitValue(b *testing.B) {
+func BenchmarkGenerateSeriesWithEmit(b *testing.B) {
         benchmarkGenerateSeriesBase(b, GENERATE_SERIES_EMITVAL_FUNC);
 }
 

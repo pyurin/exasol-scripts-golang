@@ -134,20 +134,70 @@ and in case of *EMITS*:
 
 ####Database interaction is performed via exago.ExaIter.
 ####Usage:
-##### Row []interface{}
-Current row columns
-
-
-##### RowColumn map[string]*interface{}
-Current row columns by name
-
-
-##### func (iter *ExaIter) Emit(out ...interface{})
-Emit a row
-
 
 ##### func (iter *ExaIter) Next() bool
-Iterates input, returning false if no more rows to fetch
+Iterator function. Returns falst if next row does not exist
+
+##### func (iter *ExaIter) Size() uint64
+Number of input rows
+
+##### func (iter *ExaIter) Reset() bool
+Resets iterator and reads first row
+
+##### func (iter *ExaIter) ReadInt64(colI int) *int64
+Reads int64
+
+##### func (iter *ExaIter) ReadDecimalApd(colI int) *apd.Decimal
+Reads decimal with scale as cockroachdb/apd
+
+##### func (iter *ExaIter) ReadIntBig(colI int) *big.Int
+Reads decimal w/o scale as math/big
+
+##### func (iter *ExaIter) ReadInt32(colI int) *int32
+Reads int32
+
+##### func (iter *ExaIter) ReadBool(colI int) *bool
+Reads bool
+
+##### func (iter *ExaIter) ReadFloat64(colI int) *float64
+Reads float64 / double
+
+##### func (iter *ExaIter) ReadIsNull(colI int) bool
+Checks if value is null
+
+##### func (iter *ExaIter) ReadTime(colI int) *time.Time
+Reads date or timestamp
+
+##### func (iter *ExaIter) ReadString(colI int) *string
+Reads varchar, decimal with scale, big decimal, date, timestamp values as string
+
+
+##### func (iter *ExaIter) EmitInt64(i int64)
+Emits int64
+
+##### func (iter *ExaIter) EmitInt32(i int32)
+Emits int32
+
+##### func (iter *ExaIter) EmitBool(b bool)
+Emits bool
+
+##### func (iter *ExaIter) EmitTime(t time.Time)
+Emits time / date
+
+##### func (iter *ExaIter) EmitFloat64(f float64)
+Emits float64 / double
+
+##### func (iter *ExaIter) EmitNull()
+Emits null value
+
+##### func (iter *ExaIter) EmitString(s string)
+Emits string
+
+##### func (iter *ExaIter) EmitDecimalApd(d apd.Decimal)
+Emits cockroachdb/apd - for decimal with scale or big decimals
+
+##### func (iter *ExaIter) EmitIntBig(i big.Int)
+Emits math/big int
 
 
 Usage examples:
@@ -159,26 +209,10 @@ package main
 
 import "exago"
 
-func Run(iter *exago.ExaIter) interface{} {
-    i := iter.Row[0].(int64)
-    return i * i;
-}
-/
-
-SELECT gotest(12);
-```
-
-- get column by name
-```
-CREATE OR REPLACE GO  SCALAR SCRIPT gotest(a DECIMAL(16,0)) RETURNS DECIMAL(16,0) AS
-
-package main
-
-import "exago"
-
-func Run(iter *exago.ExaIter) interface{} {
-    i := (*iter.RowColumn["a"]).(int64)
-    return i * i;
+func Run(iter *exago.ExaIter) *int64 {
+    i := *iter.ReadInt64(0)
+    i = i * i
+    return &i;
 }
 /
 
@@ -195,12 +229,14 @@ import "exago"
 
 func Run(iter *exago.ExaIter) {
     var sumResult int64;
-    for i := iter.Row[0].(int64); i < iter.Row[1].(int64); i++ {
+    for i := *iter.ReadInt64(0); i <= *iter.ReadInt64(1); i++ {
         sumResult += i;
-        iter.Emit(i, sumResult)
+        iter.EmitInt64(i)
+        iter.EmitInt64(sumResult)
     }
 }
 /
+
 
 SELECT gotest(1, 10);
 ```
@@ -213,16 +249,23 @@ package main
 
 import "exago"
 
-func Run(iter *exago.ExaIter) interface{} {
+func Run(iter *exago.ExaIter) *string {
     var resultS string;
     for true {
-        resultS += iter.Row[0].(string)
+        resultS += *iter.ReadString(0)
         if !iter.Next() {
             break;
         }
     }
-    return resultS;
+    return &resultS;
 }
 /
 
+SELECT gotest(a) FROM (
+    SELECT 'str1' as a
+    UNION ALL
+    SELECT 'str2' as a
+    UNION ALL
+    SELECT 'str3' as a
+)
 ```
