@@ -6,13 +6,13 @@ services:
 #warnings_are_errors: false
 
 before_install:
-#    - docker run --detach --name exasoldb  --privileged -p  0.0.0.0:8899:8888  -p 0.0.0.0:6594:6583 --stop-timeout 120  exasol/docker-db
-#    - wget https://www.exasol.com/support/secure/attachment/79638/EXAplus-6.0.15.tar.gz
-#    - tar -xvf ./EXAplus-6.0.15.tar.gz
+    - docker run --detach --name exasoldb  --privileged -p  0.0.0.0:8899:8888  -p 0.0.0.0:6594:6583 --stop-timeout 120  exasol/docker-db
+    - wget https://www.exasol.com/support/secure/attachment/79638/EXAplus-6.0.15.tar.gz
+    - tar -xvf ./EXAplus-6.0.15.tar.gz
 
 install:
     # sleep a bit to ensure that Docker is running (can be refactored to be more intelligent in future)
-#    - sleep 120
+    - sleep 60
 #    - docker logs exasoldb
 #    - docker exec -it exasoldb dwad_client list  # just for the log
 #    - docker inspect exasoldb  # just for the log
