@@ -13,9 +13,9 @@ before_install:
 install:
     # sleep a bit to ensure that Docker is running (can be refactored to be more intelligent in future)
     - sleep 120
-    - docker logs exasol
-    - docker exec -it exasol dwad_client list  # just for the log
-    - docker inspect exasol  # just for the log
+    - docker logs exasoldb
+    - docker exec -it exasoldb dwad_client list  # just for the log
+    - docker inspect exasoldb  # just for the log
     - easyinstall.sh 127.0.0.1:6594 'default/go' "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
 
 script:
