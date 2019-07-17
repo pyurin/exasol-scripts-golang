@@ -16,6 +16,8 @@ install:
 #    - docker logs exasoldb
 #    - docker exec -it exasoldb dwad_client list  # just for the log
 #    - docker inspect exasoldb  # just for the log
+    - pwd
+    - ls -la
     - easyinstall.sh 127.0.0.1:6594 'default/go' "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
 
 script:
