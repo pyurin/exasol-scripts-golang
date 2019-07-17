@@ -19,6 +19,7 @@ install:
     - pwd
     - ls -la
     - ./easyinstall.sh 127.0.0.1:6594 'default/go' "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
+    - sleep 60
 
 script:
     - php test/basic_test.php
