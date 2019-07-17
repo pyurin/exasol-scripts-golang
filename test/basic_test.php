@@ -8,17 +8,13 @@ $dbPort = '8899';
 function query($sql) {
     global $dbPort, $host;
     exec("./EXAplus-6.0.15/exaplus -c ".escapeshellarg("{$host}:{$dbPort}")." -x -u sys -p exasol -q -sql ".escapeshellarg($sql.';')."", $out, $result);
+    print "Running sql:\n{$sql}\n\n";
     if ($result != 0) {
         print "Failed running sql:\n{$sql}\n";
         exit(1);
     }
     sleep(1);
     $out = array_slice($out, 3, count($out)-4);
-    return $out;
-}
-
-function query_rows($sql) {
-    $out = query($sql);
     foreach ($out as $i => $row) {
         $row = preg_replace('/[ ]{3,}/', '<COL_BREAK>', $row);
         $out[$i] = array_slice(explode('<COL_BREAK>', $row), 1);
@@ -28,9 +24,11 @@ function query_rows($sql) {
 
 // test basic exasol query
 $r = query("SELECT 'result row 1'");
-if ($r[0] != 'result row 1') {
+if ($r[[0]] != 'result row 1') {
     print("Failed basic sql");
     exit(1);
+} else {
+    print "Basic sql test - ok\n";
 }
 
 query("CREATE SCHEMA IF NOT EXISTS test");
@@ -56,6 +54,8 @@ $r = query_rows("SELECT test.gotest(1, 3)");
 if ($r != [["1","1"],["2","3"],["3","6"]]) {
     print("Failed test 1");
     exit(1);
+} else {
+    print "Basic test 1 - ok\n";
 }
 
 
@@ -83,6 +83,8 @@ $r = query_rows("SELECT test.gotest_sum(v) FROM (SELECT 1 as v UNION ALL SELECT 
 if ($r != [["493"]]) {
     print("Failed test 2");
     exit(1);
+} else {
+    print "Basic test 2 - ok\n";
 }
 
 
