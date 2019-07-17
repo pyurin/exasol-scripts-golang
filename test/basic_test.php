@@ -12,6 +12,7 @@ function query($sql) {
         print "Failed running sql:\n{$sql}\n";
         exit(1);
     }
+    sleep(1);
     $out = array_slice($out, 3, count($out)-4);
     return $out;
 }
