@@ -18,7 +18,7 @@ install:
 #    - docker inspect exasoldb  # just for the log
     - pwd
     - ls -la
-    - easyinstall.sh 127.0.0.1:6594 'default/go' "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
+    - ./easyinstall.sh 127.0.0.1:6594 'default/go' "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
 
 script:
     - php test/basic_test.php
