@@ -14,6 +14,7 @@ function query($sql) {
         exit(1);
     }
     sleep(1);
+    var_dump($out);
     $out = array_slice($out, 3, count($out)-4);
     foreach ($out as $i => $row) {
         $row = preg_replace('/[ ]{3,}/', '<COL_BREAK>', $row);
