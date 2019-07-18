@@ -34,7 +34,7 @@ if ($r[0][0] != 'result row 1') {
 }
 
 query("CREATE SCHEMA IF NOT EXISTS test");
-query("alter system set script_languages = 'GO=localzmq+protobuf:///bfsdefault{$bucketPath}GolangImage?#buckets/bfsdefault{$bucketPath}go_entrypoint/go.sh'");
+query("ALTER SYSTEM SET SCRIPT_LANGUAGES = 'PYTHON=builtin_python R=builtin_r JAVA=builtin_java GO=localzmq+protobuf:///bfsdefault{$bucketPath}GolangImage?#buckets/bfsdefault{$bucketPath}go_entrypoint/go.sh'");
 query("
 CREATE OR REPLACE GO  SCALAR SCRIPT test.gotest(a DECIMAL(16,0), b DECIMAL(16,0)) EMITS (v DECIMAL(16,0), i DECIMAL(16,0)) AS
 
