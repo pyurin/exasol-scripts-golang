@@ -26,8 +26,7 @@ function query($sql) {
 
 // test basic exasol query
 $r = query("SELECT 'result row 1'");
-var_dump($r);
-if ($r[[0]] != 'result row 1') {
+if ($r[0][0] != 'result row 1') {
     print("Failed basic sql");
     exit(1);
 } else {
