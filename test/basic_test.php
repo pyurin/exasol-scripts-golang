@@ -17,9 +17,10 @@ function query($sql) {
     var_dump($out);
     $out = array_slice($out, 3, count($out)-4);
     foreach ($out as $i => $row) {
-        $row = preg_replace('/[ ]{3,}/', '<COL_BREAK>', $row);
+        $row = preg_replace('/(^|([ ]{3}))[ ]*/', '<COL_BREAK>', $row);
         $out[$i] = array_slice(explode('<COL_BREAK>', $row), 1);
     }
+    var_dump($out);
     return $out;
 }
 
