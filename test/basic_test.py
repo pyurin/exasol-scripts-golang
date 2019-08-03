@@ -2,7 +2,7 @@ import pyexasol
 import pprint
 import os
 
-host='localhost:8563'
+host='localhost:8899'
 #host='192.168.1.172:8563'
 
 printer = pprint.PrettyPrinter(indent=4, width=140)
@@ -59,21 +59,23 @@ import \"github.com/cockroachdb/apd\"
 import \"math/big\"
 
 func Run(iter *exago.ExaIter) {
+    //big int multiplication
     bigInt := iter.ReadIntBig(0)
     bigInt2 := big.NewInt(int64(2))
     bigInt.Mul(bigInt, bigInt2)
     iter.EmitIntBig(*bigInt)
 
-    dec := *iter.ReadDecimalApd(1)
+    //decimal division
+    dec := iter.ReadDecimalApd(1)
     c:= apd.BaseContext.WithPrecision(36)
     c.Quo(dec, dec, apd.New(2, 0))
-    iter.EmitDecimalApd(dec)
+    iter.EmitDecimalApd(*dec)
 }
 /
 """);
 
-result = C.execute("SELECT test.gotest(1, 0.4)").fetchall()
-if result != [(1, 1)]:
+result = C.execute("SELECT test.gotest(400000000140000000014000000001123456, 0.800000004800000004800000004222468, True, '9999-12-31', '9999-12-31 23:59:59.999')").fetchall()
+if result != [('800000000280000000028000000002246912', '0.400000002400000002400000002111234')]:
     raise Exception("Different data types test failed, result set\n", result)
 
 
