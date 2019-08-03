@@ -143,5 +143,33 @@ if result != [(None, None, None, None, None, None)]:
     raise Exception("Null data type test failed, result set\n", result)
 
 
+# Read big data set
+
+
+# Basic dataset emit test
+C.execute("""
+CREATE OR REPLACE GO SET SCRIPT test.gotest(a DECIMAL(16,0), b DECIMAL(16,0)) RETURNS DECIMAL(16,0) AS
+
+package main
+
+import \"exago\"
+
+func Run(iter *exago.ExaIter) int64 {
+    var res int64;
+    for true {
+        if *iter.ReadInt64(0) > *iter.ReadInt64(1) {
+            res++;
+        }
+        if !iter.Next {
+            break;
+        }
+    }
+}
+/
+""");
+
+# Emit big data set
+
+
 # Disconnect
 C.close()
