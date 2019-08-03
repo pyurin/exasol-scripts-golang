@@ -19,9 +19,6 @@ C.open_schema("test")
 # Set up go
 stmt = C.execute("ALTER SESSION SET SCRIPT_LANGUAGES = 'PYTHON=builtin_python R=builtin_r JAVA=builtin_java GO=localzmq+protobuf:///bfsdefault/default/go/GolangImage?#buckets/bfsdefault/default/go/go_entrypoint/go.sh'");
 
-time.sleep(1);
-
-
 
 
 # Basic dataset emit test
