@@ -3,9 +3,10 @@ import pprint
 import os
 import decimal
 import time
+import sys
 
-host='localhost:8899'
-#host='192.168.1.172:8563'
+
+host = sys.argv[1]
 
 printer = pprint.PrettyPrinter(indent=4, width=140)
 
