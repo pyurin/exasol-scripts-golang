@@ -1,7 +1,5 @@
 language: python
 
-cache: pip
-
 env:
   global:
     - EXAHOST="127.0.0.1:8563"
