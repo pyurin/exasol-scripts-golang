@@ -1,4 +1,10 @@
-language: php
+language: python
+
+cache: pip
+
+env:
+  global:
+    - EXAHOST="127.0.0.1:8563"
 
 services:
   - docker
@@ -11,15 +17,14 @@ before_install:
     - tar -xvf ./EXAplus-6.0.15.tar.gz
 
 install:
-    # sleep a bit to ensure that Docker is running (can be refactored to be more intelligent in future)
     - sleep 60
 #    - docker logs exasoldb
 #    - docker exec -it exasoldb dwad_client list  # just for the log
 #    - docker inspect exasoldb  # just for the log
-    - pwd
     - ls -la
     - ./easyinstall.sh 127.0.0.1:6594 'default/go' "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
     - sleep 60
+    - pip install -e .[pandas,encrypt,ujson,rapidjson,pproxy,pyexasol]
 
 script:
-    - php test/basic_test.php
+    - python test/basic_test.py
