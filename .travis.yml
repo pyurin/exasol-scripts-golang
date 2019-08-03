@@ -22,7 +22,7 @@ install:
     - ls -la
     - ./easyinstall.sh 127.0.0.1:6594 'default/go' "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
     - sleep 60
-    - pip install -e .[pandas,encrypt,ujson,rapidjson,pproxy,pyexasol]
+    - pip install -e pyexasol
 
 script:
     - python test/basic_test.py
