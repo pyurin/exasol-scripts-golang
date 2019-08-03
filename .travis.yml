@@ -7,14 +7,10 @@ env:
 services:
   - docker
 
-#warnings_are_errors: false
-
-before_install:
+install:
     - docker run --detach --name exasoldb  --privileged -p  0.0.0.0:8899:8888  -p 0.0.0.0:6594:6583 --stop-timeout 120  exasol/docker-db:6.1.5-d1
     - wget https://www.exasol.com/support/secure/attachment/79638/EXAplus-6.0.15.tar.gz
     - tar -xvf ./EXAplus-6.0.15.tar.gz
-
-install:
     - sleep 60
 #    - docker logs exasoldb
 #    - docker exec -it exasoldb dwad_client list  # just for the log
