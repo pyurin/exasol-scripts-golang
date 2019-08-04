@@ -1,8 +1,5 @@
 import pyexasol
 import pprint
-import os
-import decimal
-import time
 import sys
 
 
@@ -19,34 +16,6 @@ C.open_schema("test")
 
 # Set up go
 stmt = C.execute("ALTER SESSION SET SCRIPT_LANGUAGES = 'PYTHON=builtin_python R=builtin_r JAVA=builtin_java GO=localzmq+protobuf:///bfsdefault/default/go/GolangImage?#buckets/bfsdefault/default/go/go_entrypoint/go.sh'");
-
-
-
-# Basic dataset emit test
-
-stmt = C.execute("""
-CREATE OR REPLACE GO  SCALAR SCRIPT test.gotest(a DECIMAL(16,0), b DECIMAL(16,0)) EMITS (v DECIMAL(16,0), i DECIMAL(16,0), t VARCHAR(10)) AS
-
-package main
-
-import \"exago\"
-import \"fmt\"
-
-func Run(iter *exago.ExaIter) {
-    var sumResult int64;
-    for i := *iter.ReadInt64(0); i <= *iter.ReadInt64(1); i++ {
-        sumResult += i;
-        iter.EmitInt64(i)
-        iter.EmitInt64(sumResult)
-        iter.EmitString(fmt.Sprint("string", i))
-    }
-}
-/
-""");
-
-result = C.execute("SELECT test.gotest(1, 4)").fetchall()
-if result != [(1, 1, "string1"), (2, 3, "string2"), (3, 6, "string3"), (4, 10, "string4")]:
-    raise Exception("Basic test 1 failed, result set\n", result)
 
 
 # Different data types test
@@ -144,9 +113,6 @@ if result != [(None, None, None, None, None, None)]:
 
 
 # Read big data set
-
-
-# Basic dataset emit test
 C.execute("""
 CREATE OR REPLACE GO SET SCRIPT test.gotest(a DECIMAL(16,0), b DECIMAL(16,0)) RETURNS DECIMAL(16,0) AS
 
@@ -154,21 +120,66 @@ package main
 
 import \"exago\"
 
-func Run(iter *exago.ExaIter) int64 {
+func Run(iter *exago.ExaIter) *int64 {
     var res int64;
     for true {
         if *iter.ReadInt64(0) > *iter.ReadInt64(1) {
             res++;
         }
-        if !iter.Next {
+        if !iter.Next() {
             break;
         }
+    }
+    return &res
+}
+/
+""");
+
+# sql emits 10M rows with incremental decimal starting from 0
+result = C.execute("""
+    WITH t AS
+    (
+            SELECT 0 as v UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL
+            SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9
+    )
+    SELECT
+        test.gotest(v1, v2)
+    FROM (
+        SELECT
+                7789312 v1,
+                t7.v * 1000000 + t6.v * 100000 + t5.v * 10000 + t4.v * 1000 + t3.v * 100 + t2.v * 10 + t1.v v2
+        FROM t t1
+        CROSS JOIN t t2 CROSS JOIN t t3 CROSS JOIN t t4 CROSS JOIN t t5 CROSS JOIN t t6 CROSS JOIN t t7
+    )
+""").fetchall()
+if result != [(7789312,)]:
+    raise Exception("Read big data set failed, result set\n", result)
+
+
+# Emit big data set
+stmt = C.execute("""
+CREATE OR REPLACE GO SCALAR SCRIPT test.gotest(a DECIMAL(16,0), b DECIMAL(16,0)) EMITS (v DECIMAL(16,0), i DECIMAL(16,0), t VARCHAR(50)) AS
+
+package main
+
+import \"exago\"
+import \"fmt\"
+
+func Run(iter *exago.ExaIter) {
+    var sumResult int64;
+    for i := *iter.ReadInt64(0); i <= *iter.ReadInt64(1); i++ {
+        sumResult += i;
+        iter.EmitInt64(i)
+        iter.EmitInt64(sumResult)
+        iter.EmitString(fmt.Sprint("string", i))
     }
 }
 /
 """);
 
-# Emit big data set
+result = C.execute("SELECT test.gotest(1, 10000000)").fetchall()
+if len(result) != 10 * 1000 * 1000:
+    raise Exception("Emit big data set failed, incorrect len: \n", len(result))
 
 
 # Disconnect
