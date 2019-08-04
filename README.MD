@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/pyurin/exasol-scripts-golang.svg?branch=master)](https://travis-ci.com/pyurin/exasol-scripts-golang)
+
 ## Description
 
 Golang exasol client allows running golang scripts on Exasol db.
