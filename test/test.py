@@ -112,6 +112,42 @@ if result != [(None, None, None, None, None, None)]:
     raise Exception("Null data type test failed, result set\n", result)
 
 
+
+
+# Emit big data set
+stmt = C.execute("""
+CREATE OR REPLACE GO SCALAR SCRIPT test.gotest(a DECIMAL(16,0), b DECIMAL(16,0)) EMITS (v DECIMAL(16,0), i DECIMAL(16,0), t VARCHAR(50)) AS
+
+package main
+
+import \"exago\"
+import \"fmt\"
+
+func Run(iter *exago.ExaIter) {
+    var sumResult int64;
+    for i := *iter.ReadInt64(0); i <= *iter.ReadInt64(1); i++ {
+        sumResult += i;
+        iter.EmitInt64(i)
+        iter.EmitInt64(sumResult)
+        iter.EmitString(fmt.Sprint("string", i))
+    }
+}
+/
+""");
+result = C.execute("SELECT test.gotest(1, 10000000)").fetchall()
+if len(result) != 10 * 1000 * 1000:
+    raise Exception("Emit big data set failed, incorrect len: \n", len(result))
+i = 0
+vSum = 0
+for row in result:
+    i = i + 1
+    vSum += i
+    expectedRow = (i, vSum, "string" + str(i))
+    if row != expectedRow:
+        raise Exception("Emit big data set failed, row \n", row, "but expected ", expectedRow)
+
+
+
 # Read big data set
 C.execute("""
 CREATE OR REPLACE GO SET SCRIPT test.gotest(a DECIMAL(16,0), b DECIMAL(16,0)) RETURNS DECIMAL(16,0) AS
@@ -155,31 +191,6 @@ result = C.execute("""
 if result != [(7789312,)]:
     raise Exception("Read big data set failed, result set\n", result)
 
-
-# Emit big data set
-stmt = C.execute("""
-CREATE OR REPLACE GO SCALAR SCRIPT test.gotest(a DECIMAL(16,0), b DECIMAL(16,0)) EMITS (v DECIMAL(16,0), i DECIMAL(16,0), t VARCHAR(50)) AS
-
-package main
-
-import \"exago\"
-import \"fmt\"
-
-func Run(iter *exago.ExaIter) {
-    var sumResult int64;
-    for i := *iter.ReadInt64(0); i <= *iter.ReadInt64(1); i++ {
-        sumResult += i;
-        iter.EmitInt64(i)
-        iter.EmitInt64(sumResult)
-        iter.EmitString(fmt.Sprint("string", i))
-    }
-}
-/
-""");
-
-result = C.execute("SELECT test.gotest(1, 10000000)").fetchall()
-if len(result) != 10 * 1000 * 1000:
-    raise Exception("Emit big data set failed, incorrect len: \n", len(result))
 
 
 # Disconnect
