@@ -8,7 +8,7 @@ import (
 	"unsafe"
 )
 
-const OUTBUF_MAX_SIZE = 100 * 1000 * 1000;
+const OUTBUF_MAX_SIZE = 10 * 1000 * 1000;
 
 const ERROR_INCOMPATIBLE_RETURN_TYPE = "Return/emit incompatible type";
 const ERROR_INCOMPATIBLE_FUNCTION_FORMAT = "Script function type is not compatible";

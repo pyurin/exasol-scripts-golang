@@ -1,6 +1,6 @@
 if [ "$#" -ne 3 ]; then
   echo "Usage: $0 EXASOL_HOST_PORT EXASOL_BUCKET_GOPATH EXASOL_BUCKETFS_USERPASS" >&2
-  echo "        For example: $0 192.168.1.172:2580 \"/go/\" \"w:write\" " >&2
+  echo "        For example: $0 192.168.1.172:2580 \"default/go\" \"w:write\" " >&2
   exit 1
 fi
 
