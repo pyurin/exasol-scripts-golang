@@ -2,7 +2,7 @@ package main
 
 /**
  Self-sufficient test (w/o exasol server) - emulates exasol server by sending synthetic zmq messages.
- Could be useful for benchmarks.
+ Could be useful for benchmarks, not used in travis.
  */
 
 import (
