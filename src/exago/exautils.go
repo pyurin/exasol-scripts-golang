@@ -2,7 +2,7 @@ package exago
 
 import (
 	zProto "zmqcontainer"
-	zmq "github.com/pebbe/zmq2"
+	zmq "github.com/pebbe/zmq4"
 	"github.com/golang/protobuf/proto"
 	"log"
 	"syscall"
