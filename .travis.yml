@@ -21,3 +21,4 @@ script:
     - python test/test_bigemit.py "localhost:8899"
     - python test/test_bigread.py "localhost:8899"
     - python test/test_datatype.py "localhost:8899"
+    - python test/test_iterator.py "localhost:8899"
