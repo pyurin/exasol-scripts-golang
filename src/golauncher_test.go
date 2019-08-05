@@ -1,12 +1,17 @@
 package main
 
+/**
+ Self-sufficient test (w/o exasol server) - emulates exasol server by sending synthetic zmq messages.
+ Could be useful for benchmarks.
+ */
+
 import (
         "testing"
         //        "syscall"
         //       "os/exec"
         "log"
         zProto "zmqcontainer"
-        zmq "github.com/pebbe/zmq2"
+        zmq "github.com/pebbe/zmq4"
         "github.com/golang/protobuf/proto"
         "reflect"
         "syscall"
@@ -53,10 +58,6 @@ func readMsg(zSock *zmq.Socket, flags zmq.Flag, expectedMessageTypes []zProto.Me
                         }
                 }
                 break;
-        }
-        if ((flags & zmq.NOBLOCK) != 0 && (len(inMsgBytes) == 0)) {
-                log.Println("EMU read no message")
-                return nil, nil;
         }
         var inMsg zProto.ExascriptRequest;
         err2 := proto.Unmarshal(inMsgBytes, &inMsg)
