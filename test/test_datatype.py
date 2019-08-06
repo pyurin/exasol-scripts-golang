@@ -122,6 +122,6 @@ result = C.execute("SELECT test.gotest("
                    + "'" + ('ひ' * 2000000) + "',"
                    + " NULL"
                    + ")").fetchall()
-if result != [(None, None, None, None, None, ('ひ' * 2000000))]:
+if result != [(None, None, None, None, None, ('ひ' * 2000000), None)]:
     raise Exception("Big string test failed, result set (could be huge!)\n", result)
 print("Big string test - ok")

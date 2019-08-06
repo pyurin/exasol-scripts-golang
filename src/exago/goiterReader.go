@@ -34,9 +34,9 @@ func (iter *ExaIter) ReaderCleanup() {
 func (iter *ExaIter) initInputData() {
 	iter.readerRow = make([]unsafe.Pointer, len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
 	iter.readerRowDataTimeBuf = make([]time.Time, len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
-	iter.readerRowColumns = make(map[string]*unsafe.Pointer)
+	iter.readerRowColumns = make(map[string]int)
 	for colI, colInfo := range iter.exaContext.ZMetaMsg.Meta.InputColumns {
-		iter.readerRowColumns[*colInfo.Name] = &iter.readerRow[colI];
+		iter.readerRowColumns[*colInfo.Name] = colI;
 	}
 }
 
@@ -109,7 +109,6 @@ func (iter *ExaIter) Size() uint64 {
 		return *iter.readerZMsg.Next.Table.Rows;
 	}
 }
-
 
 func (iter *ExaIter) ReadInt64(colI int) *int64 {
 	if colI < 0 || colI >= iter.readerRowSize {
@@ -241,6 +240,7 @@ func (iter *ExaIter) ReadString(colI int) *string {
 
 
 
+
 /**
  * Reads message from readerZMsg and puts into iter.readerRow for further reading with iter.Read* functions
  */
@@ -291,4 +291,77 @@ func (iter *ExaIter) readRow() {
 			}
 		}
 	}
+}
+
+
+func (iter *ExaIter) ReadColInt64(colName string) *int64 {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadInt64(colI);
+}
+
+func (iter *ExaIter) ReadColDecimalApd(colName string) *apd.Decimal {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadDecimalApd(colI)
+}
+
+func (iter *ExaIter) ReadColIntBig(colName string) *big.Int {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadIntBig(colI)
+}
+
+func (iter *ExaIter) ReadColInt32(colName string) *int32 {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadInt32(colI)
+}
+
+func (iter *ExaIter) ReadColBool(colName string) *bool {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadBool(colI)
+}
+
+func (iter *ExaIter) ReadColFloat64(colName string) *float64 {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadFloat64(colI)
+}
+
+func (iter *ExaIter) ReadColIsNull(colName string) bool {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadIsNull(colI)
+}
+
+func (iter *ExaIter) ReadColTime(colName string) *time.Time {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadTime(colI)
+}
+
+func (iter *ExaIter) ReadColString(colName string) *string {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadString(colI)
 }
