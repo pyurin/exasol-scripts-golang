@@ -12,7 +12,7 @@ install:
 #    - docker exec -it exasoldb dwad_client list  # just for the log
 #    - docker inspect exasoldb  # just for the log
     - ls -la
-    - ./easyinstall.sh 127.0.0.1:6594 'default/go' "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
+    - ./install.sh 127.0.0.1:6594 'default/go' "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
     - sleep 120
     - pip install pyexasol
 #    - ./EXAplus-6.0.15/exaplus -c 127.0.0.1:8899 -x -u sys -p exasol -q -sql "ALTER SYSTEM SET SCRIPT_LANGUAGES = 'PYTHON=builtin_python R=builtin_r JAVA=builtin_java GO=localzmq+protobuf:///bfsdefault/default/go/GolangImage?#buckets/bfsdefault/default/go/go_entrypoint/go.sh'"

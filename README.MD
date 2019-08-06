@@ -6,8 +6,8 @@ Golang exasol client allows running golang scripts on Exasol db.
 
 Stage 1 and 2 can be executed withscript just like that ($BUCKETFS_PATH should be without slashes as suffix and prefix):
 ```
-#./easyinstall.sh $BUCKETFS_HOST_PORT $BUCKETFS_PATH $BUCKETFS_USER_PASS
-./easyinstall.sh 192.168.1.172:2580 "default/go" "w:write"
+#./install.sh $BUCKETFS_HOST_PORT $BUCKETFS_PATH $BUCKETFS_USER_PASS
+./install.sh 192.168.1.172:2580 "default/go" "w:write"
 ```
 
 ## Prerequisites
