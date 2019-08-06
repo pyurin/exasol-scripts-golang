@@ -9,9 +9,9 @@ C = _test_lib.init_exasol_test()
 
 stmt = C.execute("""
 CREATE OR REPLACE GO SCALAR SCRIPT test.gotest
-          (a DECIMAL(36,0), b DECIMAL(36,36), c BOOLEAN, d DATE, e TIMESTAMP, f VARCHAR(2000000))
+          (a DECIMAL(36,0), b DECIMAL(36,36), c BOOLEAN, d DATE, e TIMESTAMP, f VARCHAR(2000000), g DOUBLE)
     EMITS
-          (a DECIMAL(36,0), b DECIMAL(36,36), c BOOLEAN, d DATE, e TIMESTAMP, f VARCHAR(2000000))
+          (a DECIMAL(36,0), b DECIMAL(36,36), c BOOLEAN, d DATE, e TIMESTAMP, f VARCHAR(2000000), g DOUBLE)
 AS
 
 package main
@@ -56,6 +56,12 @@ func Run(iter *exago.ExaIter) {
         iter.EmitString(*iter.ReadString(5))
     }
 
+    if iter.ReadIsNull(6) {
+        iter.EmitNull()
+    } else {
+        iter.EmitFloat64(*iter.ReadFloat64(6))
+    }
+
 }
 /
 """);
@@ -67,9 +73,10 @@ result = C.execute("SELECT test.gotest("
                    + "True, "
                    + "'9999-12-31', "
                    + "'9999-12-31 23:59:59.999000', "
-                   + "'" + ('ひ' * 100) + "'"
+                   + "'" + ('ひ' * 100) + "',"
+                   + "1.7e308"
                    + ")").fetchall()
-if result != [('9' * 36, '0.' + ('9' * 36), True, "9999-12-31", "9999-12-31 23:59:59.999000", 'ひ' * 100)]:
+if result != [('9' * 36, '0.' + ('9' * 36), True, "9999-12-31", "9999-12-31 23:59:59.999000", 'ひ' * 100, 1.7e308)]:
     raise Exception("Big values test failed, result set\n", result)
 print("Big values test - ok")
 
@@ -81,9 +88,10 @@ result = C.execute("SELECT test.gotest("
                    + "False, "
                    + "'0001-01-01', "
                    + "'0001-01-01 00:00:00.000000', "
-                   + "''"
+                   + "'',"
+                   + "-1.7e308"
                    + ")").fetchall()
-if result != [('-' + '9' * 36, '-0.' + ('9' * 36), False, "0001-01-01", "0001-01-01 00:00:00.000000", None)]:
+if result != [('-' + '9' * 36, '-0.' + ('9' * 36), False, "0001-01-01", "0001-01-01 00:00:00.000000", None, -1.7e308)]:
     raise Exception("Small values test failed, result set\n", result)
 print("Small values test - ok")
 
@@ -95,9 +103,10 @@ result = C.execute("SELECT test.gotest("
                    + " NULL , "
                    + " NULL , "
                    + " NULL , "
+                   + " NULL , "
                    + " NULL"
                    + ")").fetchall()
-if result != [(None, None, None, None, None, None)]:
+if result != [(None, None, None, None, None, None, None)]:
     raise Exception("Null values test failed, result set\n", result)
 print("Null values test - ok")
 
