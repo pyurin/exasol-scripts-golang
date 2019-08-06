@@ -174,6 +174,34 @@ Reads date or timestamp
 Reads varchar, decimal with scale, big decimal, date, timestamp values as string
 
 
+##### func (iter *ExaIter) ReadColInt64(colName string) *int64
+Reads int64
+
+##### func (iter *ExaIter) ReadColDecimalApd(colName string) *apd.Decimal
+Reads decimal with scale as cockroachdb/apd
+
+##### func (iter *ExaIter) ReadColIntBig(colName string) *big.Int
+Reads decimal w/o scale as math/big
+
+##### func (iter *ExaIter) ReadColInt32(colName string) *int32
+Reads int32
+
+##### func (iter *ExaIter) ReadColBool(colName string) *bool
+Reads bool
+
+##### func (iter *ExaIter) ReadColFloat64(colName string) *float64
+Reads float64 / double
+
+##### func (iter *ExaIter) ReadColIsNull(colName string) bool
+Checks if value is null
+
+##### func (iter *ExaIter) ReadColTime(colName string) *time.Time
+Reads date or timestamp
+
+##### func (iter *ExaIter) ReadColString(colName string) *string
+Reads varchar, decimal with scale, big decimal, date, timestamp values as string
+
+
 ##### func (iter *ExaIter) EmitInt64(i int64)
 Emits int64
 
