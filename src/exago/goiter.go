@@ -25,7 +25,7 @@ type ExaIter struct {
 	readerInputOffsets ExaIterInputOffsets // iterator offsets within data types
 	readerRowDataTimeBuf []time.Time // I'm not sure how golang works with unsafe.Pointer to var within func in terms of safety and resource consumpt. - let's use a single row buffer for it
 	readerRow []unsafe.Pointer
-	readerRowColumns map[string]*unsafe.Pointer
+	readerRowColumns map[string]int
 
 	// writer related vars
 	writerBufferLen uint64 // expected len of output msg

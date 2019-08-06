@@ -34,9 +34,9 @@ func (iter *ExaIter) ReaderCleanup() {
 func (iter *ExaIter) initInputData() {
 	iter.readerRow = make([]unsafe.Pointer, len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
 	iter.readerRowDataTimeBuf = make([]time.Time, len(iter.exaContext.ZMetaMsg.Meta.InputColumns))
-	iter.readerRowColumns = make(map[string]*unsafe.Pointer)
+	iter.readerRowColumns = make(map[string]int)
 	for colI, colInfo := range iter.exaContext.ZMetaMsg.Meta.InputColumns {
-		iter.readerRowColumns[*colInfo.Name] = &iter.readerRow[colI];
+		iter.readerRowColumns[*colInfo.Name] = colI;
 	}
 }
 
@@ -110,7 +110,6 @@ func (iter *ExaIter) Size() uint64 {
 	}
 }
 
-
 func (iter *ExaIter) ReadInt64(colI int) *int64 {
 	if colI < 0 || colI >= iter.readerRowSize {
 		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.readerRowSize)
@@ -119,7 +118,7 @@ func (iter *ExaIter) ReadInt64(colI int) *int64 {
 		case zProto.ColumnType_PB_INT64:
 			return (*int64)(iter.readerRow[colI])
 		default:
-			log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read int64 from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
+			log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " (", *iter.readerColumnsMeta[colI].Name, ")", " type, can't read int64 from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 			return nil;
 	}
 }
@@ -134,7 +133,7 @@ func (iter *ExaIter) ReadDecimalApd(colI int) *apd.Decimal {
 		d.SetString(*(*string)(iter.readerRow[colI]))
 		return &d
 	default:
-		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read decimalApd from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " (", *iter.readerColumnsMeta[colI].Name, ")", " type, can't read decimalApd from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
 	}
 }
@@ -154,7 +153,7 @@ func (iter *ExaIter) ReadIntBig(colI int) *big.Int {
 			return nil
 		}
 	default:
-		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read intBig from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " (", *iter.readerColumnsMeta[colI].Name, ")", " type, can't read intBig from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
 	}
 }
@@ -167,7 +166,7 @@ func (iter *ExaIter) ReadInt32(colI int) *int32 {
 	case zProto.ColumnType_PB_INT32:
 		return (*int32)(iter.readerRow[colI])
 	default:
-		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read int32 from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " (", *iter.readerColumnsMeta[colI].Name, ")", " type, can't read int32 from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
 	}
 }
@@ -180,7 +179,7 @@ func (iter *ExaIter) ReadBool(colI int) *bool {
 	case zProto.ColumnType_PB_BOOLEAN:
 		return (*bool)(iter.readerRow[colI])
 	default:
-		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read bool from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " (", *iter.readerColumnsMeta[colI].Name, ")", " type, can't read bool from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
 	}
 }
@@ -193,7 +192,7 @@ func (iter *ExaIter) ReadFloat64(colI int) *float64 {
 	case zProto.ColumnType_PB_DOUBLE:
 		return (*float64)(iter.readerRow[colI])
 	default:
-		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read float64 from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " (", *iter.readerColumnsMeta[colI].Name, ")", " type, can't read float64 from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
 	}
 }
@@ -215,14 +214,14 @@ func (iter *ExaIter) ReadTime(colI int) *time.Time {
 	case zProto.ColumnType_PB_TIMESTAMP:
 		return (*time.Time)(iter.readerRow[colI]);
 	default:
-		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read string from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " (", *iter.readerColumnsMeta[colI].Name, ")", " type, can't read string from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
 	}
 }
 
 func (iter *ExaIter) ReadString(colI int) *string {
 	if colI < 0 || colI >= iter.readerRowSize {
-		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, " in row with size ", iter.readerRowSize)
+		log.Panic(ERROR_READING_COLUMN, ", index out of bounds, trying to read col ", colI, "(", *iter.readerColumnsMeta[colI].Name, ")", " in row with size ", iter.readerRowSize)
 	}
 	switch *iter.readerColumnsMeta[colI].Type {
 	case zProto.ColumnType_PB_DATE:
@@ -234,10 +233,11 @@ func (iter *ExaIter) ReadString(colI int) *string {
 	case zProto.ColumnType_PB_STRING:
 		return (*string)(iter.readerRow[colI]);
 	default:
-		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " type, can't read string from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
+		log.Panic(ERROR_READING_COLUMN, ", incorrect column ", colI, " (", *iter.readerColumnsMeta[colI].Name, ")", " type, can't read string from ", *iter.readerColumnsMeta[colI].TypeName, " / ", zProto.ColumnType_name[int32(*iter.readerColumnsMeta[colI].Type)])
 		return nil;
 	}
 }
+
 
 
 
@@ -291,4 +291,77 @@ func (iter *ExaIter) readRow() {
 			}
 		}
 	}
+}
+
+
+func (iter *ExaIter) ReadColInt64(colName string) *int64 {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadInt64(colI);
+}
+
+func (iter *ExaIter) ReadColDecimalApd(colName string) *apd.Decimal {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadDecimalApd(colI)
+}
+
+func (iter *ExaIter) ReadColIntBig(colName string) *big.Int {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadIntBig(colI)
+}
+
+func (iter *ExaIter) ReadColInt32(colName string) *int32 {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadInt32(colI)
+}
+
+func (iter *ExaIter) ReadColBool(colName string) *bool {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadBool(colI)
+}
+
+func (iter *ExaIter) ReadColFloat64(colName string) *float64 {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadFloat64(colI)
+}
+
+func (iter *ExaIter) ReadColIsNull(colName string) bool {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadIsNull(colI)
+}
+
+func (iter *ExaIter) ReadColTime(colName string) *time.Time {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadTime(colI)
+}
+
+func (iter *ExaIter) ReadColString(colName string) *string {
+	colI, ok := iter.readerRowColumns[colName]
+	if !ok {
+		log.Panic(ERROR_READING_COLUMN, ", column `", colName, "` not found. Existing columns: ", reflect.ValueOf(iter.readerRowColumns).MapKeys())
+	}
+	return iter.ReadString(colI)
 }
