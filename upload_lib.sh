@@ -32,10 +32,15 @@ then
     rm ./tmp_libs/$GOLANG_LIB_NAME.zip
     mv ./tmp_libs/$GOLANG_LIB_NAME-master ./tmp_libs/$GOLANG_LIB_NAME
     tar -zc -C ./tmp_libs/$GOLANG_LIB_NAME . | curl -f -u $EXASOL_BUCKETFS_USERPASS -X PUT -T - http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$GOLANG_LIB_FS_PATH.tar.gz
+    rm -rf ./tmp_libs/
     echo "Script successfully uploaded into http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$GOLANG_LIB_FS_PATH"
+    echo "Lib is expected to be available as $GOLANG_LIB_FS_PATH"
+    echo ""
 else
     GOLANG_LIB_NAME=${GOLANG_LIB_PATH%/} && export GOLANG_LIB_NAME="${GOLANG_LIB_NAME##*/}"
 
     tar -zc -C $GOLANG_LIB_PATH . | curl -f -u $EXASOL_BUCKETFS_USERPASS -X PUT -T - http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$GOLANG_LIB_NAME.tar.gz
-echo "Script successfully uploaded into http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$GOLANG_LIB_NAME"
+    echo "Script successfully uploaded into http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$GOLANG_LIB_NAME"
+    echo "Lib is expected to be available as $GOLANG_LIB_NAME"
+    echo ""
 fi
