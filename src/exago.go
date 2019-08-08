@@ -2,7 +2,7 @@ package main
 
 import (
 	zmq "github.com/pebbe/zmq4"
-	zProto "zmqcontainer"
+	zProto "exago/zmqcontainer"
 	"exago"
 	"os"
 	"os/exec"
