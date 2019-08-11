@@ -3,6 +3,7 @@ import pprint
 import sys
 import os
 import _test_lib
+import time
 
 C = _test_lib.init_exasol_test()
 
@@ -16,7 +17,7 @@ bucketUserPass = sys.argv[3]
 r = os.system(os.path.dirname(os.path.realpath(__file__)) + "/../upload_lib_local.sh " + bucketHostPort + " 'default/go' " + "'" + bucketUserPass + "' " + os.path.dirname(os.path.realpath(__file__)) + "/testnumbers")
 if r != 0:
     raise Exception("Failed running upload_lib_local.sh")
-
+time.sleep(2)
 C.execute("""
 CREATE OR REPLACE GO SCALAR SCRIPT test.gotest(a DECIMAL(16,0)) RETURNS BOOLEAN AS
 
@@ -41,7 +42,7 @@ print("Local lib test - ok")
 r = os.system(os.path.dirname(os.path.realpath(__file__)) + "/../upload_lib_github.sh " + bucketHostPort + " 'default/go' " + "'" + bucketUserPass + "' " + "https://github.com/visualfc/fibutil")
 if r != 0:
     raise Exception("Failed running upload_lib_github.sh")
-
+time.sleep(5)
 C.execute("""
 CREATE OR REPLACE GO SCALAR SCRIPT test.gotest(a DECIMAL(16,0)) RETURNS DECIMAL(36, 0) AS
 
