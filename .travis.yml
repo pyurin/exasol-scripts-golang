@@ -22,4 +22,4 @@ script:
     - python test/test_datatype.py "localhost:8899"
     - python test/test_iterator.py "localhost:8899"
     - python test/test_read_col_by_name.py "localhost:8899"
-    - python test/test_libs.py "localhost:8899" "localhost:6594" "w:1"
+    - python test/test_libs.py "localhost:8899" "localhost:6594" "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
