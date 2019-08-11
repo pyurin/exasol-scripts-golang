@@ -12,9 +12,16 @@ export GOLANG_LIB_PATH=$4
 
 GOLANG_LIB_PATH=${GOLANG_LIB_PATH%.git}
 GOLANG_LIB_PATH=${GOLANG_LIB_PATH%/}
-echo "Github lib path: $GOLANG_LIB_PATH"
-GOLANG_LIB_FS_PATH=${GOLANG_LIB_PATH//https:\/\/}
-echo "Lib fs path = $GOLANG_LIB_FS_PATH"
+IS_GITHUB_PATH=$(echo "$GOLANG_LIB_PATH" | egrep "^https:\/\/github.com/([^\\\/]+)/([^\\\/]+)$")
+if [ -z "$IS_GITHUB_PATH" ]
+then
+    echo "Github lib path incorrect, please, use this path template: https://github.com/user/lib"
+    exit 1
+else
+    echo "Github lib path: $GOLANG_LIB_PATH"
+    GOLANG_LIB_FS_PATH=$(echo "$GOLANG_LIB_PATH" | sed 's|https://||g')
+    echo "Lib fs path = $GOLANG_LIB_FS_PATH"
+fi
 GOLANG_LIB_NAME=${GOLANG_LIB_PATH%/} && export GOLANG_LIB_NAME="${GOLANG_LIB_NAME##*/}"
 rm -rf ./tmp_libs/
 mkdir ./tmp_libs/
