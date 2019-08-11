@@ -1,6 +1,6 @@
 if [ "$#" -ne 4 ]; then
   echo "Usage: $0 EXASOL_HOST_PORT EXASOL_BUCKET_GOPATH EXASOL_BUCKETFS_USERPASS GOLANG_LIB_DIR" >&2
-  echo "        For example: $0 192.168.1.172:2580 \"default/go\" \"w:write\" ~/go/src/numbers " >&2
+  echo "        For example: $0 192.168.1.172:2580 \"default/go\" \"w:write\" https://github.com/pyurin/exasol-scripts-golang " >&2
   exit 1
 fi
 
@@ -24,11 +24,8 @@ fi
 GOLANG_LIB_NAME=${GOLANG_LIB_PATH%/} && export GOLANG_LIB_NAME="${GOLANG_LIB_NAME##*/}"
 rm -rf ./tmp_libs/
 mkdir ./tmp_libs/
-GITHUB_ARCHIVE_PATH=$GOLANG_LIB_PATH"/archive/master.zip"
-curl -L $GITHUB_ARCHIVE_PATH -o ./tmp_libs/$GOLANG_LIB_NAME.zip
-tar -xvf ./tmp_libs/$GOLANG_LIB_NAME.zip --directory ./tmp_libs/
-rm ./tmp_libs/$GOLANG_LIB_NAME.zip
-mv ./tmp_libs/$GOLANG_LIB_NAME-master ./tmp_libs/$GOLANG_LIB_NAME
+git clone $GOLANG_LIB_PATH ./tmp_libs/
+rm -rf ./tmp_libs/.git*
 tar -zc -C ./tmp_libs/$GOLANG_LIB_NAME . | curl -f -u $EXASOL_BUCKETFS_USERPASS -X PUT -T - http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$GOLANG_LIB_FS_PATH.tar.gz
 rm -rf ./tmp_libs/
 echo "Script successfully uploaded into http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$GOLANG_LIB_FS_PATH"
