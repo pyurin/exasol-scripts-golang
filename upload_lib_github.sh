@@ -4,7 +4,7 @@ if [ "$#" -ne 4 ]; then
   exit 1
 fi
 
-set -eo pipefail
+set -e
 export EXASOL_HOST_PORT=$1
 export EXASOL_BUCKET_GOPATH=$2
 export EXASOL_BUCKETFS_USERPASS=$3
