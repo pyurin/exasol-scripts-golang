@@ -13,7 +13,7 @@ bucketHostPort = sys.argv[2]
 bucketUserPass = sys.argv[3]
 
 # Using local lib ./test/testnumbers
-r = os.system("./upload_lib_local.sh " + bucketHostPort + " 'default/go' " + "'" + bucketUserPass + "' " + os.path.dirname(os.path.realpath(__file__)) + "/testnumbers")
+r = os.system(os.path.dirname(os.path.realpath(__file__)) + "/../upload_lib_local.sh " + bucketHostPort + " 'default/go' " + "'" + bucketUserPass + "' " + os.path.dirname(os.path.realpath(__file__)) + "/testnumbers")
 if r != 0:
     raise Exception("Failed running upload_lib_local.sh")
 
@@ -38,7 +38,7 @@ print("Local lib test - ok")
 
 
 # Using github lib https://github.com/visualfc/fibutil
-r = os.system("./upload_lib_github.sh " + bucketHostPort + " 'default/go' " + "'" + bucketUserPass + "' " + "https://github.com/visualfc/fibutil")
+r = os.system(os.path.dirname(os.path.realpath(__file__)) + "/../upload_lib_github.sh " + bucketHostPort + " 'default/go' " + "'" + bucketUserPass + "' " + "https://github.com/visualfc/fibutil")
 if r != 0:
     raise Exception("Failed running upload_lib_github.sh")
 
