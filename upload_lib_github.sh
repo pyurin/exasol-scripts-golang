@@ -26,7 +26,7 @@ rm -rf ./tmp_libs/
 mkdir ./tmp_libs/
 git clone $GOLANG_LIB_PATH ./tmp_libs/
 rm -rf ./tmp_libs/.git*
-tar -zc -C ./tmp_libs/$GOLANG_LIB_NAME . | curl -f -u $EXASOL_BUCKETFS_USERPASS -X PUT -T - http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$GOLANG_LIB_FS_PATH.tar.gz
+tar -zc -C ./tmp_libs/ . | curl -f -u $EXASOL_BUCKETFS_USERPASS -X PUT -T - http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$GOLANG_LIB_FS_PATH.tar.gz
 rm -rf ./tmp_libs/
 echo "Script successfully uploaded into http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$GOLANG_LIB_FS_PATH"
 echo "Lib is expected to be available as $GOLANG_LIB_FS_PATH"
