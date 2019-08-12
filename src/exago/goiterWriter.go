@@ -1,7 +1,7 @@
 package exago
 
 import (
-	zProto "zmqcontainer"
+	zProto "exago/zmqcontainer"
 	"time"
 	"math/big"
 	apd "github.com/cockroachdb/apd"

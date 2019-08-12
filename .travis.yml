@@ -15,7 +15,6 @@ install:
     - ./install.sh 127.0.0.1:6594 'default/go' "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"
     - sleep 120
     - pip install pyexasol
-#    - ./EXAplus-6.0.15/exaplus -c 127.0.0.1:8899 -x -u sys -p exasol -q -sql "ALTER SYSTEM SET SCRIPT_LANGUAGES = 'PYTHON=builtin_python R=builtin_r JAVA=builtin_java GO=localzmq+protobuf:///bfsdefault/default/go/GolangImage?#buckets/bfsdefault/default/go/go_entrypoint/go.sh'"
 
 script:
     - python test/test_big_emit.py "localhost:8899"
@@ -23,3 +22,4 @@ script:
     - python test/test_datatype.py "localhost:8899"
     - python test/test_iterator.py "localhost:8899"
     - python test/test_read_col_by_name.py "localhost:8899"
+    - python test/test_libs.py "localhost:8899" "localhost:6594" "w:$(docker exec  exasoldb cat /exa/etc/EXAConf | grep Write | sed 's/ *WritePasswd *= *//' | base64 --decode)"

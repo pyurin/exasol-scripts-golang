@@ -1,7 +1,7 @@
 package exago
 
 import (
-	zProto "zmqcontainer"
+	zProto "exago/zmqcontainer"
 	"log"
 	"reflect"
 	"time"

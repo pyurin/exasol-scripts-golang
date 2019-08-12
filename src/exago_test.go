@@ -10,7 +10,7 @@ import (
         //        "syscall"
         //       "os/exec"
         "log"
-        zProto "zmqcontainer"
+        zProto "exago/zmqcontainer"
         zmq "github.com/pebbe/zmq4"
         "github.com/golang/protobuf/proto"
         "reflect"
