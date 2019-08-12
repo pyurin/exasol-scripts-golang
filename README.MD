@@ -2,9 +2,9 @@
 
 ## Description
 
-Golang exasol client allows running golang scripts on Exasol db.
+Golang exasol client allows running Go scripts on Exasol db.
 
-Stage 1 and 2 can be executed withscript just like that ($BUCKETFS_PATH should be without slashes as suffix and prefix):
+Installation can be executed with simple script ($BUCKETFS_PATH should be without slashes as suffix and prefix):
 ```
 #./install.sh $BUCKETFS_HOST_PORT $BUCKETFS_PATH $BUCKETFS_USER_PASS
 ./install.sh 192.168.1.172:2580 "default/go" "w:write"
@@ -14,10 +14,13 @@ Stage 1 and 2 can be executed withscript just like that ($BUCKETFS_PATH should b
 Docker, curl and Exasol server is required. Tested on Mac & Centos.
 All manipulations are expected to be done in exasol-scripts-golang root path.
 
+###Content
 1. Docker container
 2. Scripts
 3. Run on Exasol
-4. Usage
+4. Usage - basics
+5. Usage - ExaIter class
+6. Usage - external libraries
 
 ## 1. Docker container
 ### 1.1 Download current Exasol docker base image.
@@ -56,7 +59,7 @@ Stop and delete container:
 docker stop exasol-scripts-golang-container && docker rm exasol-scripts-golang-container
 ```
 
-Be aware that exasol unpacks container archive for ~a minute and bucketfs does not
+Be aware that exasol unpacks container archive for ~2 minutes and bucketfs does not
 give expected results within that time and files will be missing.
 
 ```
@@ -68,24 +71,28 @@ give expected results within that time and files will be missing.
 
 ## 2. Upload scripts
 ```
-tar -zc ./src/ ./go.sh | curl -v -u {$EXASOL_BUCKETFS_USER}:{$EXASOL_BUCKETFS_PASS} -X PUT -T - http://{$EXASOL_HOST}:{$EXASOL_BUCKETFS_PORT}/{$EXASOL_BUCKET_GOPATH}/go_entrypoint.tar.gz
+curl -f -u {$EXASOL_BUCKETFS_USER}:{$EXASOL_BUCKETFS_PASS} -X PUT -T ./src/exago.sh http://{$EXASOL_HOST}:{$EXASOL_BUCKETFS_PORT}/{$EXASOL_BUCKET_GOPATH}/src/exago.sh
+curl -f -u {$EXASOL_BUCKETFS_USER}:{$EXASOL_BUCKETFS_PASS} -X PUT -T ./src/exago.go http://{$EXASOL_HOST}:{$EXASOL_BUCKETFS_PORT}/{$EXASOL_BUCKET_GOPATH}/src/exago.go
+tar -zc -C ./src/exago/ . | curl -f -u {$EXASOL_BUCKETFS_USER}:{$EXASOL_BUCKETFS_PASS} -X PUT -T - http://{$EXASOL_HOST}:{$EXASOL_BUCKETFS_PORT}/{$EXASOL_BUCKET_GOPATH}/src/exago.tar.gz
 ```
 
 Example:
 ```
-tar -zc ./src/ ./go.sh | curl -v -u w:1 -X PUT -T - http://192.168.1.172:2580/default/go/go_entrypoint.tar.gz
+curl -f -u w:1 -X PUT -T ./src/exago.sh http://192.168.1.172:2580/default/go/src/exago.sh
+curl -f -u w:1 -X PUT -T ./src/exago.go http://192.168.1.172:2580/default/go/src/exago.go
+tar -zc -C ./src/exago/ . | curl -f -u w:1 -X PUT -T - http://192.168.1.172:2580/default/go/src/exago.tar.gz
 ```
 
 
 ## 3. Run on exasol:
 Add GO definition into SCRIPT_LANGUAGES param with:
 ```
-GO=localzmq+protobuf:///bfsdefault/{$EXASOL_BUCKET_GOPATH}/GolangImage?#buckets/bfsdefault/{$EXASOL_BUCKET_GOPATH}/go_entrypoint/go.sh
+GO=localzmq+protobuf:///bfsdefault/{$EXASOL_BUCKET_GOPATH}/GolangImage?#buckets/bfsdefault/{$EXASOL_BUCKET_GOPATH}/src/exago.sh
 ```
 
 Example:
 ```
-alter session set script_languages = 'PYTHON=builtin_python R=builtin_r JAVA=builtin_java GO=localzmq+protobuf:///bfsdefault/default/go/GolangImage?#buckets/bfsdefault/default/go/go_entrypoint/go.sh';
+alter session set script_languages = 'PYTHON=builtin_python R=builtin_r JAVA=builtin_java GO=localzmq+protobuf:///bfsdefault/default/go/GolangImage?#buckets/bfsdefault/default/go/src/exago.sh';
 ```
 
 Run test go app
@@ -96,8 +103,9 @@ CREATE OR REPLACE GO  SCALAR SCRIPT gotest() RETURNS VARCHAR(100) AS
 
         import "exago"
 
-        func Run(iter *exago.ExaIter) interface{} {
-                return "hello"
+        func Run(iter *exago.ExaIter) *string {
+                s := "hello"
+                return &s
         }
 
 /
@@ -111,7 +119,7 @@ install pyexasol [https://github.com/badoo/pyexasol/blob/master/docs/SCRIPT_OUTP
 ```
 python3 -m pyexasol script_debug --host 0.0.0.0 --p 2544
 ```
-## 4 Usage
+## 4. Usage - basics
 
 
 Golang script must comply following templates:
@@ -121,7 +129,7 @@ In case of *RETURNS*:
 
         import "exago"
 
-        func Run(iter *exago.ExaIter) interface{} {
+        func Run(iter *exago.ExaIter) *string {
         }
 ```
 and in case of *EMITS*:
@@ -134,8 +142,8 @@ and in case of *EMITS*:
         }
 ```
 
+#### 5. Usage - ExaIter class
 ####Database interaction is performed via exago.ExaIter.
-####Usage:
 
 ##### func (iter *ExaIter) Next() bool
 Iterator function. Returns falst if next row does not exist
@@ -298,4 +306,63 @@ SELECT gotest(a) FROM (
     UNION ALL
     SELECT 'str3' as a
 )
+```
+
+
+### 6. Usage - external libraries
+External libraries usage is support by exago project - local fs packages and github packages.
+Libraries must be uploaded into http://$EXASOL_HOST_PORT/$EXASOL_BUCKET_GOPATH/src/$PACKAGE_NAME folder and will be available
+with ***import "$PACKAGE_NAME"*** directive.
+For easy libraries upload you can use ***upload_lib_local.sh*** and ***upload_lib_hithub.sh*** scripts.
+####Uploading local library
+```
+./upload_lib_local.sh $EXASOL_HOST_PORT $EXASOL_BUCKET_GOPATH $BUCKETFS_USER_PASS $PACKAGE_PATH
+```
+Example:
+```
+./upload_lib_local.sh 192.168.1.231:2580 "default/go" "w:1" ./test/testnumbers/
+```
+In that example ***testnumbers*** folder will be uploaded as http://192.168.1.231:2580/default/go/src/testnumbers.tar.gz
+and will be available as ***import "testnumbers"***:
+```
+CREATE OR REPLACE GO SCALAR SCRIPT gotest(a DECIMAL(16,0)) RETURNS BOOLEAN AS
+
+package main
+
+import "exago"
+import "testnumbers"
+
+func Run(iter *exago.ExaIter) *bool {
+    b := testnumbers.IsOdd(*iter.ReadInt64(0))
+    return &b;
+}
+/
+
+SELECT gotest(2015);
+```
+####Uploading github library
+```
+./upload_lib_github.sh $EXASOL_HOST_PORT $EXASOL_BUCKET_GOPATH $BUCKETFS_USER_PASS $GITHUB_URL
+```
+Example:
+```
+./upload_lib_github.sh 192.168.1.231:2580 "default/go" "w:1" https://github.com/visualfc/fibutil
+```
+IN that example library will be uploaded as http://192.168.1.231:2580/default/go/src/github.com/visualfc/fibutil and
+available as ***import "github.com/visualfc/fibutil"*** or ***import "github.com/visualfc/fibutil/fib"***
+```
+CREATE OR REPLACE GO SCALAR SCRIPT test.gotest(a DECIMAL(16,0)) RETURNS DECIMAL(36, 0) AS
+
+package main
+
+import "exago"
+import "math/big"
+import "github.com/visualfc/fibutil/fib"
+
+func Run(iter *exago.ExaIter) *big.Int {
+    return fib.Fib(*iter.ReadInt64(0));
+}
+/
+
+SELECT test.gotest(10);
 ```
