@@ -323,7 +323,11 @@ Example:
 ./upload_lib_local.sh 192.168.1.231:2580 "default/go" "w:1" ./test/testnumbers/
 ```
 In that example ***testnumbers*** folder will be uploaded as http://192.168.1.231:2580/default/go/src/testnumbers.tar.gz
-and will be available as ***import "testnumbers"***:
+and will be available as
+```
+import "testnumbers"
+```
+Here's code example:
 ```
 CREATE OR REPLACE GO SCALAR SCRIPT gotest(a DECIMAL(16,0)) RETURNS BOOLEAN AS
 
@@ -349,7 +353,15 @@ Example:
 ./upload_lib_github.sh 192.168.1.231:2580 "default/go" "w:1" https://github.com/visualfc/fibutil
 ```
 IN that example library will be uploaded as http://192.168.1.231:2580/default/go/src/github.com/visualfc/fibutil and
-available as ***import "github.com/visualfc/fibutil"*** or ***import "github.com/visualfc/fibutil/fib"***
+available as
+```
+import "github.com/visualfc/fibutil"
+```
+or
+```
+import "github.com/visualfc/fibutil/fib"
+```
+Here's code example:
 ```
 CREATE OR REPLACE GO SCALAR SCRIPT test.gotest(a DECIMAL(16,0)) RETURNS DECIMAL(36, 0) AS
 
